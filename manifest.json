@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "pdog.coast",
+  "name": "Coast",
+  "version": "1.1.0",
+  "author": "pdog",
+  "description": "Tides, weather, swim temperatures and offshore current compass for any coast",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Widget.qml"
+  },
+  "barWidget": {
+    "displayName": "Coast",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "left"
+  }
+}
