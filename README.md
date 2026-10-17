@@ -11,17 +11,36 @@ Omarchy theme automatically.
 
 > **Limitations.** Currents and sea temperature are a coarse offshore model
 > (~8 km), not beach conditions or navigation guidance. Coast shows readings
-> only and gives no swimming or safety advice. Tide times currently come
-> from one Met Office page (Bournemouth); other locations show no tides yet.
+> only and gives no swimming or safety advice. Tide times cover UK coasts only
+> (ADMIRALTY) and need a free API key; elsewhere the panel shows no tides.
 > See [Data and accuracy](#data-and-accuracy).
 
 ## Install
 
-Requires Omarchy with its shell (Quickshell) and Python 3. No API keys.
+Requires Omarchy with its shell (Quickshell) and Python 3.
 
 ```bash
 omarchy plugin add https://github.com/paulwitcombe/coast --enable
 ```
+
+### Tide times (UK): free ADMIRALTY key
+
+Weather, currents and temperatures work straight away. Tide times come from the
+UK Hydrographic Office's ADMIRALTY UK Tidal API, which needs a free key:
+
+1. Create an account at https://developer.admiralty.co.uk/, open **Products →
+   UK Tidal API – Discovery** and subscribe (free for a year, renewable).
+2. On your **Profile** page, click **Show** next to the subscription's
+   **Primary key** and copy it.
+3. In a terminal, run:
+
+   ```bash
+   ~/.config/omarchy/plugins/pdog.coast/set-admiralty-key.sh
+   ```
+
+   Paste the key when asked (it isn't shown). It is saved to
+   `~/.config/omarchy/coast/admiralty-key` with owner-only permissions, outside
+   the plugin folder. Alternatively set `ADMIRALTY_API_KEY` in the environment.
 
 This clones the plugin into `~/.config/omarchy/plugins/pdog.coast`, validates it
 and puts the wave icon in the bar (left section by default). Then:
@@ -60,8 +79,11 @@ The sea colour is the theme's `cyan`, read from the active theme's
 
 ## Data and accuracy
 
-Tide times and chart-datum heights come from the Met Office Bournemouth Pier
-page. The tide chart is eased between the published highs and lows (a cosine
+Tide times and heights above chart datum come from the ADMIRALTY UK Tidal API
+(UK Hydrographic Office), for the nearest of its 607 UK stations within 30 km of
+the chosen location. The station and its distance are shown under the tide
+list. The API returns times in UTC; the panel shows them in the location's
+timezone. The tide chart is eased between the predicted highs and lows (a cosine
 approximation), so it shows the shape of the tide, not measured levels.
 
 Weather and offshore currents come from Open-Meteo. Current speed is converted
@@ -73,16 +95,16 @@ coastal accuracy is limited: this is a coarse offshore forecast, not a
 measurement of beach rip currents or a navigation aid. Wind direction is
 separately labelled **from**.
 
-No API key or new packages required. Uses Python 3 and the existing Omarchy shell.
-Weather/marine feeds are cached for 15 minutes, tides for 6 hours under
-`~/.cache/omarchy-coast`. Failed requests retain cached data with a warning;
-current conditions older than 2 hours are hidden. Times use the location's
-timezone with automatic daylight-saving changes. Met Office HTML changes may
-require a parser update; failure is shown rather than substituted estimated
-tide times.
+No new packages required. Uses Python 3 and the existing Omarchy shell.
+Weather/marine feeds are cached for 15 minutes, tide events for 1 hour and the
+tide station list for 7 days, under `~/.cache/omarchy-coast`. Failed requests
+retain cached data with a warning; current conditions older than 2 hours are
+hidden. Times use the location's timezone with automatic daylight-saving
+changes. Without a key, or away from UK stations, the panel says why there are
+no tide times rather than estimating them.
 
 Sources:
-- https://weather.metoffice.gov.uk/forecast/gcn8t2d23
+- https://developer.admiralty.co.uk/ (ADMIRALTY UK Tidal API)
 - https://open-meteo.com/en/docs
 - https://open-meteo.com/en/docs/marine-weather-api (Open-Meteo / DWD attribution)
 
@@ -136,8 +158,7 @@ location in the saved state file. Before any picker selection, a legacy
   "marineLatitude": -33.90,
   "marineLongitude": 151.30,
   "timezone": "Australia/Sydney",
-  "temperatureUnit": "C",
-  "tideUrl": null
+  "temperatureUnit": "C"
 }
 ```
 
@@ -148,10 +169,10 @@ Cache filenames include the source URL hash, keeping locations separate. Invalid
 config fails visibly, never silently falls back to another beach.
 
 Weather and marine model coverage is global but availability and coastal accuracy
-vary. Tides currently support only explicitly configured Met Office forecast
-pages; omitting `tideUrl` disables tides. Search selections have no tide provider,
-except the recognised Bournemouth entry. Worldwide tide-provider adapters,
-localisation and broader unit preferences remain future work. Returned marine
+vary. Tides are picked automatically from the nearest ADMIRALTY station, so they
+work for any UK location searched; other countries have no tide provider yet.
+Worldwide tide-provider adapters, localisation and broader unit preferences
+remain future work. Returned marine
 grid cells more than 30 km from the selected location are withheld; this is a
 coverage guard, not a guarantee of beach-level accuracy.
 
@@ -173,6 +194,8 @@ an explicitly empty favourites list stays empty. State writes remain atomic.
 - `coast.py`: fetches, caches and combines the feeds into one report.
 - `location.py`: location search, recents, favourites and saved state.
 - `temperatures.py`: validates the temperature readings and works out wind chill.
+- `tides.py`: ADMIRALTY station lookup and tide events.
+- `set-admiralty-key.sh`: saves your ADMIRALTY key without showing it.
 
 ## Development
 
@@ -194,4 +217,6 @@ shell can keep a cached copy of the old widget. If a change doesn't appear, run
 ## Licence
 
 MIT. See [LICENSE](LICENSE). Data stays under its providers' terms: Open-Meteo
-(CC BY 4.0), GeoNames (CC BY 4.0) via Open-Meteo geocoding, and the Met Office.
+(CC BY 4.0), GeoNames (CC BY 4.0) via Open-Meteo geocoding, and ADMIRALTY tide
+predictions (© Crown copyright, UK Hydrographic Office) under your own API
+subscription's terms. Each user needs their own key.

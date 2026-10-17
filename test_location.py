@@ -42,12 +42,11 @@ class LocationTests(unittest.TestCase):
             with patch('location.STATE_PATH', path):
                 self.assertEqual(load_location()['name'], 'Sydney')
             self.assertEqual(state['active']['temperatureUnit'], 'F')
-            self.assertIsNone(state['active']['tideUrl'])
+            self.assertNotIn('tideUrl', state['active'])
             state = select_location(dict(SYDNEY, temperatureUnit='C'), path)
             self.assertEqual(len(state['saved']), 2)
             self.assertEqual(state['saved'][0]['temperatureUnit'], 'C')
             state = select_location(DEFAULT_LOCATION, path)
-            self.assertEqual(state['active']['tideUrl'], DEFAULT_LOCATION['tideUrl'])
             self.assertEqual(len(state['saved']), 2)
 
     def test_recent_limit_keeps_home(self):
@@ -73,7 +72,7 @@ class LocationTests(unittest.TestCase):
         self.assertEqual(len(results),2)
         self.assertNotEqual(results[0]['detail'], results[1]['detail'])
         self.assertNotEqual(results[0]['timezone'], results[1]['timezone'])
-        self.assertTrue(all(x['tideUrl'] is None for x in results))
+        self.assertTrue(all('tideUrl' not in x for x in results))
 
     def test_bournemouth_search_restores_supported_tides(self):
         result = search_results({'results': [DEFAULT_LOCATION]})[0]

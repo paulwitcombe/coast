@@ -378,7 +378,7 @@ Panel {
                             Label {
                                 visible: !tideSummary.next
                                 width: parent.width; wrapMode: Text.WordWrap
-                                text: fetcher.running ? "Loading tide times…" : (root.location.tideUrl ? "Tide times unavailable" : "No tide source for this location")
+                                text: fetcher.running ? "Loading tide times…" : (root.report.tideNote || "Tide times unavailable")
                                 font.pixelSize: Style.font.bodySmall; opacity: 0.65
                             }
                             }
@@ -536,7 +536,7 @@ Panel {
                                 }
                             }
                         }
-                        Label { width: parent.width; wrapMode: Text.WordWrap; text: "Choose a coastal place. Offshore coverage varies; tide times need a supported local source. Search: Open-Meteo / GeoNames."; font.pixelSize: Style.font.bodySmall; opacity: 0.6 }
+                        Label { width: parent.width; wrapMode: Text.WordWrap; text: "Choose a coastal place. Offshore coverage varies; tide times cover UK coasts (ADMIRALTY). Search: Open-Meteo / GeoNames."; font.pixelSize: Style.font.bodySmall; opacity: 0.6 }
                         Rectangle { width: parent.width; height: 1; color: root.ink; opacity: 0.15 }
                     }
                     // Plain temperature readings; no advice or verdicts.
@@ -606,8 +606,8 @@ Panel {
                                         Label { required property var modelData; text: modelData }
                                     }
                                 }
-                                Label { visible: !root.report.nextTide; width: parent.width; wrapMode: Text.WordWrap; text: fetcher.running ? "Loading tide times…" : (root.location.tideUrl ? "Tide times unavailable" : "No tide provider configured for this location"); opacity: 0.7 }
-                                Label { id: tideNote; visible: !!root.location.tideUrl; width: parent.width; wrapMode: Text.WordWrap; text: "Chart datum heights · Met Office\nCurve approximate"; opacity: 0.6; font.pixelSize: Style.font.bodySmall }
+                                Label { visible: !root.report.nextTide; width: parent.width; wrapMode: Text.WordWrap; text: fetcher.running ? "Loading tide times…" : (root.report.tideNote || "Tide times unavailable"); opacity: 0.7 }
+                                Label { id: tideNote; visible: !!root.report.tideStation; width: parent.width; wrapMode: Text.WordWrap; text: root.report.tideStation ? "Station: " + root.report.tideStation.name + " · " + root.report.tideStation.distance + " km\nChart datum · curve approximate" : ""; opacity: 0.6; font.pixelSize: Style.font.bodySmall }
                             }
                             Rectangle { width: 1; height: tideList.height; color: root.ink; opacity: 0.15 }
                             Item {
@@ -715,9 +715,9 @@ Panel {
                         Row {
                             spacing: Style.space(24)
                             Label {
-                                visible: !!root.location.tideUrl
-                                text: "Tide source ↗"; color: Color.accent; font.pixelSize: Style.font.bodySmall
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally(root.location.tideUrl) }
+                                visible: !!root.report.tideStation
+                                text: "Tides: ADMIRALTY / UKHO ↗"; color: Color.accent; font.pixelSize: Style.font.bodySmall
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("https://developer.admiralty.co.uk/") }
                             }
                             Label {
                                 text: "Open-Meteo / DWD ↗"; color: Color.accent; font.pixelSize: Style.font.bodySmall

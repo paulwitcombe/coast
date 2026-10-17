@@ -45,7 +45,7 @@ class TemperatureTests(unittest.TestCase):
             location = {'name': 'Sydney', 'latitude': -33.89, 'longitude': 151.28, 'timezone': 'Australia/Sydney', 'temperatureUnit': 'F'}
             path.write_text(json.dumps(location))
             loaded = load_location(path)
-            self.assertIsNone(loaded['tideUrl'])
+            self.assertNotIn('tideUrl', loaded)
             self.assertEqual(loaded['marineLatitude'], -33.89)
             self.assertNotEqual(source_urls(loaded), source_urls(DEFAULT_LOCATION))
             empty = {'data': None, 'fetched': None, 'error': None}

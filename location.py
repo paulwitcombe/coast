@@ -1,4 +1,4 @@
-"""Explicit location settings; no silently inherited Bournemouth tide source."""
+"""Explicit location settings: search, recents, favourites and saved state."""
 import json
 import math
 import os
@@ -12,8 +12,7 @@ from zoneinfo import ZoneInfo
 DEFAULT_LOCATION = {"name": "Bournemouth", "detail": "BH2 5HA · Pier & bay",
                     "latitude": 50.716, "longitude": -1.88,
                     "marineLatitude": 50.70, "marineLongitude": -1.88,
-                    "timezone": "Europe/London", "country": "UK", "temperatureUnit": "C",
-                    "tideUrl": "https://weather.metoffice.gov.uk/forecast/gcn8t2d23"}
+                    "timezone": "Europe/London", "country": "UK", "temperatureUnit": "C"}
 
 
 def country_abbreviation(code):
@@ -56,11 +55,10 @@ def validate_location(settings):
     if settings["temperatureUnit"] not in ("C", "F"):
         raise ValueError("temperatureUnit must be C or F")
     settings.setdefault("detail", "Coastal conditions")
-    settings.setdefault("tideUrl", None)
+    # Tides now come from the nearest ADMIRALTY station; older saved state may still carry a Met Office URL.
+    settings.pop("tideUrl", None)
     if not settings.get("country"):
         settings["country"] = country_for_timezone(settings["timezone"])
-    if settings["tideUrl"] and not str(settings["tideUrl"]).startswith("https://weather.metoffice.gov.uk/forecast/"):
-        raise ValueError("Only Met Office tide pages are currently supported")
     return settings
 
 

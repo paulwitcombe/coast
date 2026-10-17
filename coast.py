@@ -2,13 +2,11 @@
 """Location-aware coastal feeds. Standard library only; independent cached sources."""
 import concurrent.futures
 import datetime as dt
-import html
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
-import re
 import tempfile
 import time
 import urllib.request
@@ -16,6 +14,7 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 from location import DEFAULT_LOCATION, load_location
 from temperatures import readings
+import tides as admiralty
 
 ZONE = ZoneInfo("Europe/London")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))) / "omarchy-coast"
@@ -29,24 +28,6 @@ def bearing(value):
 def local(timestamp, fmt="%H:%M", zone=ZONE):
     return dt.datetime.fromtimestamp(timestamp, zone).strftime(fmt)
 
-def parse_tides(raw, zone=ZONE):
-    events = []
-    sections = re.split(r'id="overview-container-(\d{4}-\d{2}-\d{2})"', raw)
-    for i in range(1, len(sections), 2):
-        day, section = sections[i:i+2]
-        for block in re.findall(r'<div class="tide-event">(.*?)</div>', section, re.S):
-            parts = [html.unescape(re.sub('<[^>]+>', '', p)).strip() for p in re.findall(r'<p[^>]*>(.*?)</p>', block, re.S)]
-            if len(parts) != 3 or parts[0] not in ("high tide", "low tide"):
-                raise ValueError("Tide page format changed")
-            clock = parts[1].replace(" ", "").lower()
-            fmt = "%Y-%m-%d %I:%M%p" if ":" in clock else "%Y-%m-%d %I%p"
-            stamp = dt.datetime.strptime(day + " " + clock, fmt).replace(tzinfo=zone).timestamp()
-            height = float(parts[2].split()[0])
-            events.append({"time": stamp, "kind": parts[0].split()[0], "height": height})
-    if not events:
-        raise ValueError("No tide events found")
-    return sorted(events, key=lambda e: e["time"])
-
 def parse_model(raw):
     data = json.loads(raw)
     if not isinstance(data, dict) or not isinstance(data.get("current"), dict) or not number(data["current"].get("time")):
@@ -56,7 +37,7 @@ def parse_model(raw):
         raise ValueError("Incomplete current forecast")
     return data
 
-def fetch(name, url, parser, ttl):
+def fetch(name, url, parser, ttl, headers=None):
     path = CACHE / (name + "-" + hashlib.sha256(url.encode()).hexdigest()[:16] + ".json")
     cached = None
     try:
@@ -66,7 +47,7 @@ def fetch(name, url, parser, ttl):
     except (OSError, ValueError, KeyError):
         cached = None
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "Coast/1.1 (desktop widget)"})
+        request = urllib.request.Request(url, headers={"User-Agent": "Coast/1.1 (desktop widget)", **(headers or {})})
         with urllib.request.urlopen(request, timeout=18) as response:
             data = parser(response.read().decode("utf-8"))
         result = {"data": data, "fetched": time.time(), "error": None}
@@ -104,7 +85,7 @@ def countdown(seconds):
     return "in " + " ".join(([str(hours) + "h"] if hours else []) + ([str(rest) + "m"] if rest or not hours else []))
 
 def tide_curve(events, now, before=6 * 3600, after=18 * 3600, step=900):
-    """Approximate water level from now-6h to now+18h: cosine between Met Office highs and lows.
+    """Approximate water level from now-6h to now+18h: cosine between the published highs and lows.
 
     Only spans covered by consecutive events are drawn; x is the fraction of the window.
     """
@@ -133,7 +114,7 @@ def grid_distance(location, model):
     a = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(delta_lon/2)**2
     return round(6371 * 2 * math.asin(math.sqrt(min(1, max(0, a)))), 1)
 
-def build_report(sources, now=None, location=None):
+def build_report(sources, now=None, location=None, station=None):
     now = time.time() if now is None else now
     location = dict(DEFAULT_LOCATION) if location is None else location
     zone = ZoneInfo(location["timezone"])
@@ -171,16 +152,18 @@ def build_report(sources, now=None, location=None):
             velocity = knots(hourly.get("ocean_current_velocity", [])[i], md.get("hourly_units", {}).get("ocean_current_velocity"))
             angle = hourly.get("ocean_current_direction", [])[i] if velocity is not None and velocity > 0 else None
             forecast.append({"time": at(stamp), "speed": velocity, "direction": angle, "bearing": bearing(angle)})
-    warnings = [name + ": cached / unavailable" for name, source in zip(("Tides", "Weather", "Currents"), sources) if source["error"]]
+    warnings = [name + ": cached / unavailable" for name, source in zip(("Tides", "Weather", "Currents"), sources) if source["error"] and not source.get("note")]
+    if tides.get("note"): warnings.append(tides["note"])
     if not w: warnings.append("Weather conditions unavailable or expired")
     if not m: warnings.append("Current conditions unavailable or expired")
     if not nearby: warnings.append("No nearby marine grid: offshore readings withheld (more than 30 km from this location)")
-    if not any(e["time"] >= now for e in events): warnings.append("No upcoming tide times available")
+    if not tides.get("note") and not any(e["time"] >= now for e in events): warnings.append("No upcoming tide times available")
     return {
         "updated": at(now), "tides": events[:12], "location": location, "temperatures": temperatures,
         "nextTide": dict(upcoming[0], due=countdown(upcoming[0]["time"] - now)) if upcoming else None,
         "followingTide": upcoming[1] if len(upcoming) > 1 else None,
         "tideCurve": tide_curve(tides["data"] or [], now),
+        "tideStation": station if tides["data"] else None, "tideNote": tides.get("note"),
         "weather": {**w, "summary": conditions(w.get("weather_code")), "windBearing": bearing(w.get("wind_direction_10m"))},
         "marine": {"speed": speed, "direction": direction, "bearing": bearing(direction), "wave": m.get("wave_height"), "temperature": sea, "time": at(m["time"]) if m else "—", "latitude": md.get("latitude"), "longitude": md.get("longitude"), "distance": distance},
         "forecast": forecast, "warnings": warnings,
@@ -199,16 +182,35 @@ def source_urls(location):
     return weather, marine
 
 
+def no_tides(note):
+    return {"data": None, "fetched": None, "error": note, "note": note}
+
+
+def tide_source(location):
+    """Events for the nearest ADMIRALTY station, or a reason there are none."""
+    key = admiralty.api_key()
+    if not key:
+        return no_tides("Tide times need a free ADMIRALTY API key (see README)"), None
+    auth = admiralty.headers(key)
+    # The station list barely changes; events are refetched hourly.
+    stations = fetch("tide-stations", admiralty.BASE + "Stations", admiralty.parse_stations, 7 * 86400, auth)
+    if not stations["data"]:
+        return no_tides("Tide stations unavailable: " + str(stations["error"])), None
+    station = admiralty.nearest_station(stations["data"], location["latitude"], location["longitude"])
+    if not station:
+        return no_tides("No UK tidal station within %d km of this location" % admiralty.MAX_STATION_KM), None
+    url = admiralty.BASE + "Stations/" + station["id"] + "/TidalEvents?duration=7"
+    return fetch("tides-" + station["id"], url, admiralty.parse_events, 3600, auth), station
+
+
 def main():
     location = load_location()
     weather_url, marine_url = source_urls(location)
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         weather = pool.submit(fetch, "weather", weather_url, parse_model, 900)
         marine = pool.submit(fetch, "marine", marine_url, parse_model, 900)
-        tide = pool.submit(fetch, "tides-" + location["timezone"].replace("/", "_"), location["tideUrl"],
-                           lambda raw: parse_tides(raw, ZoneInfo(location["timezone"])), 21600) if location["tideUrl"] else None
-        tides = tide.result() if tide else {"data": None, "fetched": None, "error": "No tide provider configured for this location"}
-        print(json.dumps(build_report([tides, weather.result(), marine.result()], location=location), allow_nan=False))
+        tides, station = pool.submit(tide_source, location).result()
+        print(json.dumps(build_report([tides, weather.result(), marine.result()], location=location, station=station), allow_nan=False))
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,7 @@
 import datetime as dt
 import unittest
 from location import DEFAULT_LOCATION
-from coast import ZONE, bearing, knots, parse_tides, parse_model, build_report, conditions, countdown, tide_curve
+from coast import ZONE, bearing, knots, parse_model, build_report, conditions, countdown, tide_curve
 
 class CoastTests(unittest.TestCase):
     def test_bearings_and_units(self):
@@ -10,16 +10,6 @@ class CoastTests(unittest.TestCase):
         self.assertEqual(knots(1.852, "km/h"), 1.0)
         self.assertIsNone(knots(None, "km/h"))
         self.assertIsNone(knots(1, "unknown"))
-
-    def test_tide_dates_and_bst(self):
-        for day, offset in (("2026-09-19", 1), ("2026-12-19", 0)):
-            page = '<div id="overview-container-' + day + '"><div class="tide-event"><p>high tide</p><p>12:37pm</p><p>1.7 metres</p></div><div class="tide-event"><p>low tide</p><p>10pm</p><p>1.4 metres</p></div></div>'
-            events = parse_tides(page)
-            self.assertEqual(len(events), 2)
-            utc = dt.datetime.fromtimestamp(events[0]["time"], dt.timezone.utc)
-            self.assertEqual(utc.hour, 12 - offset)
-            self.assertEqual(dt.datetime.fromtimestamp(events[1]["time"], ZONE).hour, 22)
-        with self.assertRaises(ValueError): parse_tides("changed page")
 
     def test_expired_direction_is_hidden(self):
         unavailable = {"data": None, "error": "offline", "fetched": None}
