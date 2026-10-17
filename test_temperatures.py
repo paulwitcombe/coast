@@ -4,30 +4,21 @@ import tempfile
 import unittest
 from coast import build_report, source_urls
 from location import load_location, DEFAULT_LOCATION
-from swim import assess, wind_chill
+from temperatures import readings, wind_chill
 
 
-class SwimTests(unittest.TestCase):
-    def test_warm_air_never_offsets_cold_sea(self):
-        for sea in (-1, 10, 14.9, 15):
-            self.assertEqual(assess(sea, 30, 32, 5)['level'], 'cold')
-        self.assertEqual(assess(15.1, 30, 32, 5)['level'], 'caution')
-        self.assertEqual(assess(20, 20, 20, 5)['level'], 'neutral')
+class TemperatureTests(unittest.TestCase):
+    def test_readings_are_plain_values(self):
+        result = readings(17.1, 12.8, 9.6, 8.3)
+        self.assertEqual((result['sea'], result['air'], result['feels']), (17.1, 12.8, 9.6))
+        self.assertIsNone(result['windChill'])
+        self.assertEqual(set(result), {'sea', 'air', 'feels', 'windChill'})
 
-    def test_air_and_feels_like_independently_warn(self):
-        self.assertEqual(assess(24, 14, 18, 5)['level'], 'caution')
-        self.assertEqual(assess(24, 18, 14, 10)['level'], 'caution')
-
-    def test_missing_invalid_and_zero_inputs(self):
+    def test_invalid_inputs_become_none(self):
         for invalid in (None, float('nan'), float('inf'), True, '17', 100):
-            result = assess(invalid, 20, 20, 5)
-            self.assertEqual(result['level'], 'unknown')
-            self.assertFalse(result['complete'])
-        self.assertTrue(assess(0, 0, 0, 0)['complete'])
-        result = assess(10, None, None, None)
-        self.assertEqual(result['level'], 'cold')
-        self.assertFalse(result['complete'])
-        self.assertEqual(assess(20, 20, None, 5)['level'], 'unknown')
+            self.assertIsNone(readings(invalid, 20, 20, 5)['sea'])
+        self.assertEqual(readings(0, 0, 0, 0)['sea'], 0)
+        self.assertIsNone(readings(10, None, None, 20)['windChill'])
 
     def test_wind_chill_known_value_and_domain(self):
         # NWS chart rounds to -19 F; allow its half-degree F rounding.
@@ -37,15 +28,15 @@ class SwimTests(unittest.TestCase):
         self.assertIsNotNone(wind_chill(10, 3.1))
         self.assertIsNone(wind_chill(None, 10))
 
-    def test_stale_and_unknown_units_cannot_produce_complete_assessment(self):
+    def test_stale_and_unknown_units_are_withheld(self):
         empty = {'data': None, 'fetched': None, 'error': None}
         weather = {'data': {'current': {'time': 10000, 'temperature_2m': 20, 'apparent_temperature': 19, 'wind_speed_10m': 5}, 'current_units': {'temperature_2m': '°C', 'apparent_temperature': '°C', 'wind_speed_10m': 'mp/h'}}, 'fetched': 10000, 'error': None}
         marine = {'data': {'current': {'time': 10000, 'sea_surface_temperature': 21}, 'current_units': {'sea_surface_temperature': '°C'}}, 'fetched': 10000, 'error': None}
         sources = [empty, weather, marine]
-        self.assertTrue(build_report(sources, now=10000)['swim']['complete'])
-        self.assertFalse(build_report(sources, now=18000)['swim']['complete'])
+        self.assertEqual(build_report(sources, now=10000)['temperatures']['sea'], 21)
+        self.assertIsNone(build_report(sources, now=18000)['temperatures']['sea'])
         marine['data']['current_units']['sea_surface_temperature'] = '°F'
-        self.assertEqual(build_report(sources, now=10000)['swim']['level'], 'unknown')
+        self.assertIsNone(build_report(sources, now=10000)['temperatures']['sea'])
 
     def test_location_isolation_and_validation(self):
         with tempfile.TemporaryDirectory() as folder:

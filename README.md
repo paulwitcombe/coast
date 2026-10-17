@@ -10,8 +10,8 @@ Omarchy theme automatically.
 ![The Coast panel](docs/screenshot.png)
 
 > **Limitations.** Currents and sea temperature are a coarse offshore model
-> (~8 km), not beach conditions or navigation guidance. The swim box checks cold
-> exposure only and is never a "safe to swim" verdict. Tide times currently come
+> (~8 km), not beach conditions or navigation guidance. Coast shows readings
+> only and gives no swimming or safety advice. Tide times currently come
 > from one Met Office page (Bournemouth); other locations show no tides yet.
 > See [Data and accuracy](#data-and-accuracy).
 
@@ -45,7 +45,8 @@ Everything fits on screen at once, top to bottom:
    - Right, **NEXT TIDE**: the next high or low, a countdown and height, the tide
      after it, and a chart of the water level from 6 hours ago to 18 hours ahead
      with a marker for now.
-2. **Swim conditions · cold exposure.** A boxed temperature check (see below).
+2. **Temperatures.** Sea, air, feels-like and wind chill as plain readings
+   (see below).
 3. **Next tides and weather.** The next four highs and lows as a compact table,
    then a divider, then **weather**, **wind** and **waves**.
 4. **Current.** A box in the theme's sea colour combining the compass (the
@@ -85,22 +86,20 @@ Sources:
 - https://open-meteo.com/en/docs
 - https://open-meteo.com/en/docs/marine-weather-api (Open-Meteo / DWD attribution)
 
-## Swim conditions
+## Temperatures
 
-The swim box screens **cold exposure**, never whether swimming is safe.
-It shows sea, air, apparent (feels-like) temperature and the NWS wind-chill index
-where applicable (air ≤10°C, wind >3 mph). Neither air index estimates cooling
-of a wet swimmer. No swim duration, health, age or wetsuit safety score is given.
-No personal health data is collected or stored.
+The temperature box shows four readings and nothing else: sea surface
+temperature (offshore marine model), air temperature, apparent (feels-like)
+temperature and the NWS wind-chill index. Wind chill is only defined at air
+≤10°C with wind >3 mph, so it shows "—" otherwise. Coast gives no swimming,
+health or safety advice and makes no judgement about the readings.
 
-The conservative cold-water alert uses ≤15°C. Water below 20°C or air / feels-like
-below 15°C produces a cool-conditions reminder: these are product comfort bands,
-not validated safety thresholds. Warmer air never offsets cold water. All
-remaining complete readings are labelled “Milder temperatures”, never “safe”.
-Missing, invalid or >2-hour-old conditions yield an incomplete check, retaining
-any known cold-water warning. Offshore sea estimates may differ from the beach.
-Flags, local advice, waves, currents, water quality and personal suitability are
-not assessed. Method and source links are available in the panel.
+Readings are withheld (shown as "—") when they are missing, out of range, older
+than 2 hours, or come back from the API in unexpected units. The offshore sea
+estimate can differ from the temperature at the beach. The box notes when each
+model reading is from.
+
+- https://www.weather.gov/safety/cold-wind-chill-chart (wind-chill formula)
 
 ## Locations
 
@@ -156,10 +155,6 @@ localisation and broader unit preferences remain future work. Returned marine
 grid cells more than 30 km from the selected location are withheld; this is a
 coverage guard, not a guarantee of beach-level accuracy.
 
-Before public distribution, obtain water-safety and jurisdiction-specific legal
-review of the claims and method. Avoid medical profiling and “safe to swim”
-clearance. Adding a disclaimer alone does not validate a safety feature.
-
 ## Favourites
 
 Use **☆ Save** beside the location controls to favourite the current coast;
@@ -177,7 +172,7 @@ an explicitly empty favourites list stays empty. State writes remain atomic.
   rendered on its own to check orientation.
 - `coast.py`: fetches, caches and combines the feeds into one report.
 - `location.py`: location search, recents, favourites and saved state.
-- `swim.py`: the cold-exposure check.
+- `temperatures.py`: validates the temperature readings and works out wind chill.
 
 ## Development
 

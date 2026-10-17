@@ -51,10 +51,9 @@ Panel {
     readonly property var marine: report.marine || ({})
     readonly property var weather: report.weather || ({})
     readonly property var location: report.location || ({})
-    readonly property var swim: report.swim || ({})
+    readonly property var temps: report.temperatures || ({})
     // Below ~0.3 kn the stream is turning; the modelled direction swings and means little.
     readonly property bool slack: typeof marine.speed === "number" && marine.speed < 0.3
-    readonly property color swimColor: swim.level === "cold" ? Color.urgent : (swim.level === "caution" ? "#d9ae65" : Color.accent)
     readonly property color ink: Color.popups.text
     // Sea colour for the current compass: the theme's cyan, read from its colors.toml.
     property color sea: "#449dab"
@@ -177,7 +176,7 @@ Panel {
         anchors.fill: parent
         bar: root.bar
         text: "󰞍"
-        tooltipText: (root.location.name || "Coast") + " · " + root.temperature(root.weather.temperature_2m) + " · " + root.arrow(root.marine.direction) + " " + root.value(root.marine.speed, " kn") + (root.swim.title ? "\n" + root.swim.title : "") + (root.report.nextTide ? "\nNext " + root.report.nextTide.kind + " tide " + root.report.nextTide.label : "")
+        tooltipText: (root.location.name || "Coast") + " · " + root.temperature(root.weather.temperature_2m) + " · " + root.arrow(root.marine.direction) + " " + root.value(root.marine.speed, " kn") + (root.report.nextTide ? "\nNext " + root.report.nextTide.kind + " tide " + root.report.nextTide.label : "")
         onPressed: function(b) { if (b === Qt.MiddleButton) root.refresh(); else root.toggle() }
     }
     KeyboardPanel {
@@ -540,36 +539,27 @@ Panel {
                         Label { width: parent.width; wrapMode: Text.WordWrap; text: "Choose a coastal place. Offshore coverage varies; tide times need a supported local source. Search: Open-Meteo / GeoNames."; font.pixelSize: Style.font.bodySmall; opacity: 0.6 }
                         Rectangle { width: parent.width; height: 1; color: root.ink; opacity: 0.15 }
                     }
+                    // Plain temperature readings; no advice or verdicts.
                     Rectangle {
                         width: parent.width
-                        height: swimContent.implicitHeight + Style.space(28)
+                        height: tempContent.implicitHeight + Style.space(28)
                         radius: Style.space(8)
-                        color: Qt.rgba(root.swimColor.r, root.swimColor.g, root.swimColor.b, 0.06)
-                        border.color: Qt.rgba(root.swimColor.r, root.swimColor.g, root.swimColor.b, 0.35)
+                        color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.04)
+                        border.color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.3)
                         Column {
-                            id: swimContent
+                            id: tempContent
                             x: Style.space(14); y: Style.space(14)
                             width: parent.width - Style.space(28)
                             spacing: Style.space(8)
-                            Row {
-                                width: parent.width
-                                spacing: Style.space(12)
-                                Column {
-                                    width: parent.width
-                                    spacing: Style.space(8)
-                                    Label { text: "SWIM CONDITIONS · COLD EXPOSURE"; font.pixelSize: Style.font.bodySmall; font.letterSpacing: 1; color: root.swimColor }
-                                    Label { width: parent.width; wrapMode: Text.WordWrap; text: root.failure ? "Conditions unavailable" : (root.swim.title || "Checking temperatures…"); font.pixelSize: Style.font.title; font.bold: true; color: root.swimColor }
-                                    Label { width: parent.width; wrapMode: Text.WordWrap; text: root.swim.scope || "Temperature check only · not a safe-to-swim verdict"; font.pixelSize: Style.font.bodySmall; opacity: 0.8 }
-                                }
-                            }
+                            Label { text: "TEMPERATURES"; font.pixelSize: Style.font.bodySmall; font.letterSpacing: 1; color: Color.accent }
                             Row {
                                 width: parent.width
                                 Repeater {
                                     model: [
-                                        {label: "SEA", value: root.swim.sea},
-                                        {label: "AIR", value: root.swim.air},
-                                        {label: "FEELS LIKE", value: root.swim.feels},
-                                        {label: "WIND CHILL", value: root.swim.windChill}
+                                        {label: "SEA", value: root.temps.sea},
+                                        {label: "AIR", value: root.temps.air},
+                                        {label: "FEELS LIKE", value: root.temps.feels},
+                                        {label: "WIND CHILL", value: root.temps.windChill}
                                     ]
                                     Column {
                                         required property var modelData
@@ -580,34 +570,14 @@ Panel {
                                     }
                                 }
                             }
-                            Label { width: parent.width; wrapMode: Text.WordWrap; text: "Wind chill: " + (root.swim.windChillNote || "Unavailable."); font.pixelSize: Style.font.bodySmall; opacity: 0.65 }
-                            Label { width: parent.width; wrapMode: Text.WordWrap; text: root.failure || (root.swim.reasons || []).join(" "); font.pixelSize: Style.font.bodySmall }
-                            Label { width: parent.width; wrapMode: Text.WordWrap; text: root.swim.checks || "Check local beach advice before swimming."; font.pixelSize: Style.font.bodySmall; opacity: 0.8 }
-                            Label { width: parent.width; wrapMode: Text.WordWrap; text: "Offshore sea estimate; beach temperatures can differ. " + (root.swim.times || ""); font.pixelSize: Style.font.bodySmall; opacity: 0.6 }
                             Label {
-                                text: methodDetails.visible ? "− How this check works" : "+ How this check works"
-                                font.pixelSize: Style.font.bodySmall; color: Color.accent
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: methodDetails.visible = !methodDetails.visible }
-                            }
-                            Column {
-                                id: methodDetails
-                                visible: false
-                                width: parent.width
-                                spacing: Style.space(6)
-                                Label { width: parent.width; wrapMode: Text.WordWrap; text: (root.swim.method || "") + " Feels-like combines weather effects; wind chill applies only at air ≤10°C and wind >3 mph. Neither models cooling of a wet swimmer. No age, medical or wetsuit safety adjustment is made."; font.pixelSize: Style.font.bodySmall; opacity: 0.75 }
-                                Row {
-                                    spacing: Style.space(24)
-                                    Label { text: "RNLI swimming advice ↗"; font.pixelSize: Style.font.bodySmall; color: Color.accent
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("https://rnli.org/water-safety/choose-your-activity/open-water-swimming") }
-                                    }
-                                    Label { text: "Wind chill method ↗"; font.pixelSize: Style.font.bodySmall; color: Color.accent
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("https://www.weather.gov/safety/cold-wind-chill-chart") }
-                                    }
-                                }
+                                width: parent.width; wrapMode: Text.WordWrap
+                                text: root.failure || ("Sea is an offshore model estimate and can differ at the beach. Wind chill is shown only at air ≤10°C with wind >3 mph. " + (root.temps.times || ""))
+                                font.pixelSize: Style.font.bodySmall; opacity: 0.6
                             }
                         }
                     }
-                    // Inset to line up with the text inside the swim box, slightly narrower than the box.
+                    // Inset to line up with the text inside the temperature box, slightly narrower than the box.
                     Column {
                         x: Style.space(14)
                         width: parent.width - Style.space(28)

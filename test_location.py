@@ -87,7 +87,7 @@ class LocationTests(unittest.TestCase):
         report = build_report([empty,empty,marine],now=10000,location=location)
         self.assertIsNone(report['marine']['temperature'])
         self.assertIsNone(report['marine']['direction'])
-        self.assertFalse(report['swim']['complete'])
+        self.assertIsNone(report['temperatures']['sea'])
         self.assertTrue(any('No nearby marine' in w for w in report['warnings']))
 
     def test_country_abbreviations(self):

@@ -15,7 +15,7 @@ import urllib.request
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 from location import DEFAULT_LOCATION, load_location
-from swim import assess
+from temperatures import readings
 
 ZONE = ZoneInfo("Europe/London")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))) / "omarchy-coast"
@@ -153,15 +153,15 @@ def build_report(sources, now=None, location=None):
     nearby = distance is None or distance <= 30
     if not nearby:
         m = {}
-    # Require explicit units before feeding safety-related temperature screening.
+    # Only trust temperature and wind readings whose units are confirmed.
     wu = (weather["data"] or {}).get("current_units", {})
     mu = md.get("current_units", {})
     sea = m.get("sea_surface_temperature") if mu.get("sea_surface_temperature") == "°C" else None
     air = w.get("temperature_2m") if wu.get("temperature_2m") == "°C" else None
     feels = w.get("apparent_temperature") if wu.get("apparent_temperature") == "°C" else None
     wind = w.get("wind_speed_10m") if wu.get("wind_speed_10m") in ("mp/h", "mph") else None
-    swim = assess(sea, air, feels, wind)
-    swim["times"] = "Sea model " + (at(m["time"]) if m else "—") + " · air model " + (at(w["time"]) if w else "—")
+    temperatures = readings(sea, air, feels, wind)
+    temperatures["times"] = "Sea model " + (at(m["time"]) if m else "—") + " · air model " + (at(w["time"]) if w else "—")
     speed = knots(m.get("ocean_current_velocity"), md.get("current_units", {}).get("ocean_current_velocity"))
     direction = m.get("ocean_current_direction") if speed is not None and speed > 0 else None
     hourly = md.get("hourly", {}) if nearby else {}
@@ -177,7 +177,7 @@ def build_report(sources, now=None, location=None):
     if not nearby: warnings.append("No nearby marine grid: offshore readings withheld (more than 30 km from this location)")
     if not any(e["time"] >= now for e in events): warnings.append("No upcoming tide times available")
     return {
-        "updated": at(now), "tides": events[:12], "location": location, "swim": swim,
+        "updated": at(now), "tides": events[:12], "location": location, "temperatures": temperatures,
         "nextTide": dict(upcoming[0], due=countdown(upcoming[0]["time"] - now)) if upcoming else None,
         "followingTide": upcoming[1] if len(upcoming) > 1 else None,
         "tideCurve": tide_curve(tides["data"] or [], now),
