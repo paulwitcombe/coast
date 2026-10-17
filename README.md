@@ -7,12 +7,29 @@ left of the bar to open it. Middle-click or press Enter in the popup to refresh.
 Escape dismisses it. Colours, font, spacing and borders follow the active
 Omarchy theme automatically.
 
-Open: `omarchy-shell pdog.coast open`
+![The Coast panel](docs/screenshot.png)
 
-Disable: `omarchy plugin disable pdog.coast`
+> **Limitations.** Currents and sea temperature are a coarse offshore model
+> (~8 km), not beach conditions or navigation guidance. The swim box checks cold
+> exposure only and is never a "safe to swim" verdict. Tide times currently come
+> from one Met Office page (Bournemouth); other locations show no tides yet.
+> See [Data and accuracy](#data-and-accuracy).
 
-The pre-install bar configuration is backed up at
-`~/.config/omarchy/shell.json.before-coast`.
+## Install
+
+Requires Omarchy with its shell (Quickshell) and Python 3. No API keys.
+
+```bash
+omarchy plugin add https://github.com/paulwitcombe/coast --enable
+```
+
+This clones the plugin into `~/.config/omarchy/plugins/pdog.coast`, validates it
+and puts the wave icon in the bar (left section by default). Then:
+
+- Open: click the icon, or `omarchy-shell pdog.coast open`
+- Update: `omarchy plugin update pdog.coast`
+- Disable: `omarchy plugin disable pdog.coast`
+- Remove: `omarchy plugin remove pdog.coast`
 
 ## Panel layout
 
@@ -164,9 +181,22 @@ an explicitly empty favourites list stays empty. State writes remain atomic.
 
 ## Development
 
+Clone into the plugins folder to work on it directly; saved changes reload the
+plugin:
+
+```bash
+git clone https://github.com/paulwitcombe/coast ~/.config/omarchy/plugins/pdog.coast
+omarchy plugin enable pdog.coast
+```
+
 Run checks: `python3 -B -m unittest discover -s . -v` (`-B` stops `__pycache__`
 being written into the plugin folder, which would reload the shell).
 
 Saving files under `~/.config/omarchy/plugins/` hot-reloads the plugin, but the
 shell can keep a cached copy of the old widget. If a change doesn't appear, run
 `omarchy restart shell`.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE). Data stays under its providers' terms: Open-Meteo
+(CC BY 4.0), GeoNames (CC BY 4.0) via Open-Meteo geocoding, and the Met Office.
