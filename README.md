@@ -228,7 +228,7 @@ works anywhere without the laptop.
 
 - **Widgets.** Small: the next tide, countdown, current and sea temperature.
   Medium adds the compass and tide chart. Large adds the next four tides and
-  temperatures. Lock screen: the next tide and current.
+  temperatures. Lock screen: labelled Tide, Current and Sea lines.
 - **Panel.** Tap a widget or run the script: the same sections as the Omarchy
   panel, with location search, favourites, °C/°F and Refresh.
 

@@ -603,7 +603,7 @@ function buildWidget(report, family, theme, problem) {
   const currentLine = number(marine.speed) && marine.speed < 0.3 ? "Slack · " + value(marine.speed, " kn")
     : number(marine.direction) ? arrow(marine.direction) + " " + marine.bearing + " " + value(marine.speed, " kn") : "Current —"
 
-  if (family === "accessoryInline") { w.addText(next ? tideLine + " · " + next.due : currentLine); return w }
+  if (family === "accessoryInline") { w.addText(next ? "Tide " + tideLine + " · " + next.due.replace(/^in /, "") : "Current " + currentLine.replace(/^Current /, "")); return w }
   if (family === "accessoryCircular") {
     w.addAccessoryWidgetBackground = true
     const s = w.addStack(); s.layoutVertically(); s.centerAlignContent()
@@ -612,9 +612,15 @@ function buildWidget(report, family, theme, problem) {
     return w
   }
   if (family === "accessoryRectangular") {
-    addText(w, tideLine + (next ? " · " + next.due : ""), 13, fg, true)
-    addText(w, currentLine, 12, fg, false)
-    addText(w, "Sea " + temperature(temps.sea, unit), 12, fg, false)
+    // Labelled lines in the lock screen's own font, which is narrower than monospace.
+    const line = (label, text) => {
+      const row = w.addStack(); row.centerAlignContent()
+      const l = row.addText(label + " "); l.font = Font.boldSystemFont(15); l.lineLimit = 1
+      const v = row.addText(text); v.font = Font.systemFont(15); v.lineLimit = 1; v.minimumScaleFactor = 0.6
+    }
+    line("Tide", next ? tideLine + " · " + next.due.replace(/^in /, "") : (r.tideNote ? "unavailable" : "—"))
+    line("Current", currentLine.replace(/^Current /, ""))
+    line("Sea", temperature(temps.sea, unit))
     return w
   }
 
