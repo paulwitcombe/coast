@@ -483,9 +483,9 @@ input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--fg);
       ${compassSVG(marine.direction, slack, theme)}
       <div class="gap">
         <div class="small" style="letter-spacing:1px">CURRENT</div>
-        <div class="headline" style="color:var(--sea)">${number(marine.direction) ? "→ " + marine.bearing : "—"}</div>
+        <div class="headline" style="color:var(--sea)">${slack ? "Slack" : number(marine.direction) ? arrow(marine.direction) + " " + marine.bearing : "—"}</div>
         <div>${value(marine.speed, " kn")}</div>
-        ${slack ? `<div class="small" style="opacity:0.8">Near slack</div>` : ""}
+        ${slack && number(marine.direction) ? `<div class="small" style="opacity:0.8">Unsettled · ${arrow(marine.direction)} ${marine.bearing}</div>` : ""}
       </div>
     </div>
     <hr>
@@ -599,7 +599,9 @@ function buildWidget(report, family, theme, problem) {
   const r = report || {}, loc = r.location || DEFAULT_LOCATION, unit = loc.temperatureUnit || "C"
   const next = r.nextTide, marine = r.marine || {}, temps = r.temperatures || {}
   const tideLine = next ? tideHeadline(next) : "No tide times"
-  const currentLine = number(marine.direction) ? "→ " + marine.bearing + " " + value(marine.speed, " kn") : "Current —"
+  // The arrow points where the current flows; below 0.3 kn the direction means little.
+  const currentLine = number(marine.speed) && marine.speed < 0.3 ? "Slack · " + value(marine.speed, " kn")
+    : number(marine.direction) ? arrow(marine.direction) + " " + marine.bearing + " " + value(marine.speed, " kn") : "Current —"
 
   if (family === "accessoryInline") { w.addText(next ? tideLine + " · " + next.due : currentLine); return w }
   if (family === "accessoryCircular") {

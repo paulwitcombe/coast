@@ -704,9 +704,9 @@ Panel {
                                             anchors.verticalCenter: parent.verticalCenter
                                             spacing: Style.space(6)
                                             Label { text: "CURRENT"; font.pixelSize: Style.font.bodySmall; font.letterSpacing: 1; color: root.sea }
-                                            Label { text: compass.hasDirection ? "→ " + root.marine.bearing : "—"; font.pixelSize: Style.font.display; font.bold: true; color: root.sea }
+                                            Label { text: root.slack ? "Slack" : compass.hasDirection ? root.arrow(root.marine.direction) + " " + root.marine.bearing : "—"; font.pixelSize: Style.font.display; font.bold: true; color: root.sea }
                                             Label { text: root.value(root.marine.speed, " kn"); color: root.sea }
-                                            Label { visible: root.slack; text: "Near slack"; font.pixelSize: Style.font.bodySmall; color: root.sea; opacity: 0.8 }
+                                            Label { visible: root.slack && compass.hasDirection; text: "Unsettled · " + root.arrow(root.marine.direction) + " " + root.marine.bearing; font.pixelSize: Style.font.bodySmall; color: root.sea; opacity: 0.8 }
                                         }
                                     }
                                     Rectangle { width: 1; height: compassRow.height; color: root.sea; opacity: 0.35 }

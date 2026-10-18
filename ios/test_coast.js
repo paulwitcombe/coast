@@ -94,3 +94,14 @@ test("panel escapes text from the APIs", () => {
   assert.strictEqual(coast.searchLocation({name: "Bournemouth", latitude: 50.72, longitude: -1.88, timezone: "Europe/London"}).detail, coast.DEFAULT_LOCATION.detail)
   assert.strictEqual(coast.searchLocation({name: "Nowhere"}), null)
 })
+
+test("current shows a pointing arrow, or slack below 0.3 kn", () => {
+  const now = Date.now() / 1000
+  const marine = kmh => ({data: {latitude: 50.7, longitude: -1.88, current: {time: now, ocean_current_velocity: kmh, ocean_current_direction: 225},
+    current_units: {ocean_current_velocity: "km/h"}}, fetched: now, error: null})
+  const panel = kmh => coast.panelHTML(coast.buildReport([empty, empty, marine(kmh)], now, coast.DEFAULT_LOCATION, null),
+    {active: coast.DEFAULT_LOCATION, favourites: [], recents: []}, coast.THEME)
+  assert.match(panel(2), /class="headline" style="color:var\(--sea\)">↙ SW</)
+  assert.match(panel(0.2), /class="headline" style="color:var\(--sea\)">Slack</)
+  assert.match(panel(0.2), /Unsettled · ↙ SW/)
+})
