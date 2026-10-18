@@ -443,7 +443,7 @@ input { flex: 1; font: inherit; color: var(--fg); background: transparent; borde
   <hr>
   <section class="picker">
     <div class="label accent" style="opacity:1">Choose a coastal location</div>
-    <div class="field"><input id="q" placeholder="Town or postcode, country" autocomplete="off" enterkeyhint="search"><button onclick="search()">Search</button></div>
+    <div class="field"><input id="q" placeholder="Town, country" autocomplete="off" enterkeyhint="search"><button onclick="search()">Search</button></div>
     <div id="msg" class="small dim">Search worldwide. Include the country to distinguish places with the same name.</div>
     <div id="results"></div>
     ${state.favourites.length ? `<div class="label accent" style="opacity:1;margin-top:14px">Favourites</div>${list(state.favourites, "favourite")}` : ""}
@@ -528,7 +528,7 @@ async function search() {
     ;(data.results || []).map(searchLocation).filter(Boolean).forEach(l => found.push(l))
     out.innerHTML = found.map((l, i) => '<button class="place" data-result="' + i + '"><span class="accent">' + escapeHTML(l.name + (l.country ? "," + l.country : "") + " · " + l.detail) +
       '</span><small>' + escapeHTML(l.timezone + " · " + l.latitude.toFixed(3) + ", " + l.longitude.toFixed(3)) + '</small></button>').join("")
-    msg.textContent = found.length ? "Choose a result below." : "No matches. Try a nearby coastal town or postcode."
+    msg.textContent = found.length ? "Choose a result below." : "No matches. Try a nearby coastal town."
   } catch (e) { msg.textContent = "Search failed. Check your connection and try again." }
 }
 </script>

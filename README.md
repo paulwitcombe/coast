@@ -139,7 +139,8 @@ model reading is from.
 ## Locations
 
 Click **Change location** under the heading (or press `/` while the panel is open).
-Search for a town or postcode, optionally followed by a country, then click a
+Search for a town, optionally followed by a country (postcodes aren't supported
+by the search service), then click a
 result. Keyboard: Enter searches; Down/Up selects a result; Enter applies it;
 Escape closes the picker. Results show `Town,CC · region`, then the timezone and
 coordinates to distinguish namesakes. Choose coastal places; the search also

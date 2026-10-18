@@ -155,7 +155,7 @@ Panel {
             try {
                 var response = JSON.parse(searchOutput.text)
                 root.searchResults = response.results || []
-                root.locationMessage = response.error ? "Search failed. Check your connection and try again." : (root.searchResults.length ? "Choose a result below." : "No matches. Try a nearby coastal town or postcode.")
+                root.locationMessage = response.error ? "Search failed. Check your connection and try again." : (root.searchResults.length ? "Choose a result below." : "No matches. Try a nearby coastal town.")
             } catch (e) { root.locationMessage = "Search failed. Please try again." }
         }
     }
@@ -512,7 +512,7 @@ Panel {
                                     Keys.onUpPressed: function(event) { root.selectedResult = Math.max(-1, root.selectedResult - 1); event.accepted = true }
                                     Keys.onEscapePressed: function(event) { root.choosingLocation = false; keys.forceActiveFocus(); event.accepted = true }
                                 }
-                                Label { anchors.verticalCenter: parent.verticalCenter; x: Style.space(8); visible: !locationField.text && !locationField.activeFocus; text: "Town or postcode, country"; opacity: 0.45 }
+                                Label { anchors.verticalCenter: parent.verticalCenter; x: Style.space(8); visible: !locationField.text && !locationField.activeFocus; text: "Town, country"; opacity: 0.45 }
                             }
                             Label {
                                 anchors.verticalCenter: parent.verticalCenter
