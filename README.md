@@ -199,6 +199,50 @@ Favourites persist separately from the eight recent locations and are not evicte
 by new searches. Existing saved state starts with the active location favourited;
 an explicitly empty favourites list stays empty. State writes remain atomic.
 
+## iPhone (Scriptable)
+
+Coast also runs on iOS in [Scriptable](https://scriptable.app), a free app that
+runs JavaScript. It gives you home screen and lock screen widgets, and the full panel
+in the same Omarchy style when you open it. It talks to the APIs directly, so it
+works anywhere without the laptop.
+
+<img src="docs/iphone.png" alt="Coast on iPhone" width="300">
+
+**Install**
+
+1. Install Scriptable from the App Store.
+2. On the iPhone, open
+   https://raw.githubusercontent.com/paulwitcombe/coast/main/ios/install.js in
+   Safari, select all and copy.
+3. In Scriptable, tap **+**, paste, and tap ▶. It downloads `ios/Coast.js`
+   and saves it as the **Coast** script. Run the installer again to update.
+4. Open **Coast** and paste your ADMIRALTY primary key when asked. It is stored
+   in the iOS Keychain, not in the script.
+5. Add a Scriptable widget to the home screen or lock screen, long-press it,
+   choose **Edit Widget** and pick **Coast**. Set **Parameter** to the name of a
+   favourite (for example `Poole`) to pin that widget to it.
+
+**What it shows**
+
+- **Widgets.** Small: the next tide, countdown, current and sea temperature.
+  Medium adds the compass and tide chart. Large adds the next four tides and
+  temperatures. Lock screen: the next tide and current.
+- **Panel.** Tap a widget or run the script: the same sections as the Omarchy
+  panel, with location search, favourites, °C/°F and Refresh.
+
+**Tide data and your quota.** The phone uses the same rules as the laptop:
+tide data is fetched live on every run and never stored. Widgets ask iOS to
+refresh at most hourly, so the phone uses about 1,500 of your 10,000 requests a
+month even with a widget on screen all day. The phone and laptop share the
+quota because they use the same key. Locations, favourites and units are saved
+in Scriptable's own folder on the phone.
+
+**Theme.** The script carries the Omarchy theme colours in a `THEME` line near
+the top (Tokyo Night by default). To match a different Omarchy theme, run
+`python3 -B ~/.config/omarchy/plugins/pdog.coast/ios/theme.py` and paste its
+output over that line in Scriptable. The panel uses JetBrains Mono; widgets use
+the system monospaced font, as iOS widgets can't load web fonts.
+
 ## Files
 
 - `Widget.qml`: bar button and panel.
@@ -209,6 +253,11 @@ an explicitly empty favourites list stays empty. State writes remain atomic.
 - `temperatures.py`: validates the temperature readings and works out wind chill.
 - `tides.py`: ADMIRALTY station lookup and tide events.
 - `set-admiralty-key.sh`: saves your ADMIRALTY key without showing it.
+- `ios/Coast.js`: the iPhone version for Scriptable (widgets and panel).
+- `ios/install.js`: installs or updates it in Scriptable.
+- `ios/theme.py`: prints the `THEME` line for your current Omarchy theme.
+- `ios/test_coast.js`, `ios/preview.js`: its tests, and a preview of the panel
+  with live data (`node ios/preview.js > coast.html`).
 
 ## Development
 
@@ -221,7 +270,8 @@ omarchy plugin enable pdog.coast
 ```
 
 Run checks: `python3 -B -m unittest discover -s . -v` (`-B` stops `__pycache__`
-being written into the plugin folder, which would reload the shell).
+being written into the plugin folder, which would reload the shell) and
+`node --test ios/test_coast.js` for the iPhone script.
 
 Saving files under `~/.config/omarchy/plugins/` hot-reloads the plugin, but the
 shell can keep a cached copy of the old widget. If a change doesn't appear, run

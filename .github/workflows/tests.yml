@@ -17,3 +17,8 @@ jobs:
           python-version: "3.12"
       - name: Run tests
         run: python -B -m unittest discover -s . -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run iOS script tests
+        run: node --test ios/test_coast.js
