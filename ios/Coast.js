@@ -15,6 +15,8 @@
 // for your current Omarchy theme.
 const THEME = {"background": "#1a1b26", "foreground": "#a9b1d6", "accent": "#7aa2f7", "sea": "#449dab", "urgent": "#f7768e"}
 
+// The installer replaces "dev" with the commit it downloaded.
+const VERSION = "dev"
 const ADMIRALTY = "https://admiraltyapi.azure-api.net/uktidalapi/api/V1/"
 const KEY_NAME = "coast.admiralty-key"
 // Beyond this a station's times no longer describe the chosen beach.
@@ -367,7 +369,7 @@ ${FONT_LOADER}
 <style>
 :root { --bg: ${theme.background}; --fg: ${theme.foreground}; --accent: ${theme.accent}; --sea: ${theme.sea}; --urgent: ${theme.urgent}; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html { background: var(--bg); color-scheme: dark; -webkit-text-size-adjust: 100%; }
+html { background: var(--bg); color-scheme: dark; -webkit-text-size-adjust: 100%; overflow-x: hidden; }
 body { font: 14px/1.45 "JetBrains Mono", ui-monospace, Menlo, monospace; color: var(--fg);
   padding: calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 16px); }
 .panel { border: 2px solid var(--accent); padding: 18px 16px; max-width: 900px; margin: 0 auto; }
@@ -407,7 +409,7 @@ hr { border: 0; border-top: 1px solid var(--fg); opacity: 0.15; margin: 14px 0; 
 .warn { color: var(--urgent); font-size: 12px; margin-top: 12px; }
 .picker { display: none; } body.picking .picker { display: block; }
 .field { display: flex; gap: 12px; margin: 10px 0; }
-input { flex: 1; font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--accent); border-radius: 4px; padding: 8px; }
+input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--fg); background: transparent; border: 1px solid var(--accent); border-radius: 4px; padding: 8px; }
 .place { display: block; width: 100%; padding: 8px; margin-top: 4px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .place small { display: block; color: var(--fg); opacity: 0.6; font-size: 12px; }
 @media (min-width: 700px) {
@@ -494,6 +496,7 @@ input { flex: 1; font: inherit; color: var(--fg); background: transparent; borde
   ${(r.warnings || []).length ? `<div class="warn">${escapeHTML(r.warnings.join(" · "))}</div>` : ""}
   <p class="small dim" style="margin-top:12px">Fetched: tides ${escapeHTML((r.fetched || {}).tides || "—")} · weather ${escapeHTML((r.fetched || {}).weather || "—")} · marine ${escapeHTML((r.fetched || {}).marine || "—")}</p>
   <div class="links" style="margin-top:10px">${r.tideStation ? `<a class="accent" href="https://developer.admiralty.co.uk/">Tides: ADMIRALTY / UKHO ↗</a>` : ""}<a class="accent" href="https://open-meteo.com/">Open-Meteo / DWD ↗</a></div>
+  <p class="small dim" style="margin-top:10px">Coast for iOS · version ${escapeHTML(VERSION)}</p>
 </main>
 <script>
 // Scriptable waits on this; each tap sends one action back to the script.
