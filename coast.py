@@ -195,6 +195,9 @@ def source_urls(location):
     return weather, marine
 
 
+UNAVAILABLE = "Tide data temporarily unavailable"
+
+
 def no_tides(note):
     return {"data": None, "fetched": None, "error": note, "note": note}
 
@@ -224,12 +227,14 @@ def tide_source(location):
     auth = admiralty.headers(key)
     stations = fetch_live(admiralty.BASE + "Stations", admiralty.parse_stations, auth)
     if not stations["data"]:
-        return no_tides("Tide stations unavailable: " + str(stations["error"])), None
+        return no_tides(UNAVAILABLE), None
     station = admiralty.nearest_station(stations["data"], location["latitude"], location["longitude"])
     if not station:
         return no_tides("No UK tidal station within %d km of this location" % admiralty.MAX_STATION_KM), None
     url = admiralty.BASE + "Stations/" + station["id"] + "/TidalEvents?duration=7"
-    return fetch_live(url, admiralty.parse_events, auth), station
+    events = fetch_live(url, admiralty.parse_events, auth)
+    # Quota exceeded (403), outages and bad replies all read the same in the panel.
+    return (events, station) if events["data"] else (no_tides(UNAVAILABLE), None)
 
 
 def main(args=sys.argv[1:]):

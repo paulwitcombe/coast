@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 from coast import SKIPPED, ZONE, build_report, held_tides, no_tides, tide_source
 from location import DEFAULT_LOCATION
@@ -75,6 +76,18 @@ class TideTests(unittest.TestCase):
             source, station = tide_source(DEFAULT_LOCATION)
             self.assertEqual(list(Path(folder).iterdir()), [])
         self.assertEqual((station["id"], len(source["data"])), ("0037", 2))
+
+    def test_quota_exceeded_reads_as_temporarily_unavailable(self):
+        def download(url, headers=None):
+            if url.endswith("Stations"):
+                return STATIONS
+            raise urllib.error.HTTPError(url, 403, "Quota Exceeded", {}, None)
+        with patch("tides.api_key", return_value="k"), patch("coast.download", side_effect=download):
+            source, station = tide_source(DEFAULT_LOCATION)
+        self.assertIsNone(station)
+        self.assertEqual(source["note"], "Tide data temporarily unavailable")
+        empty = {"data": None, "fetched": None, "error": None}
+        self.assertEqual(build_report([source, empty, empty], now=0)["warnings"].count("Tide data temporarily unavailable"), 1)
 
     def test_open_panel_hands_back_held_events(self):
         events = [{"time": 3600, "kind": "high", "height": 1.8}, {"time": 7200, "kind": "low", "height": 1.2}]

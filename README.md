@@ -44,8 +44,12 @@ UK Hydrographic Office's ADMIRALTY UK Tidal API, which needs a free key:
 
 The Discovery terms don't allow tide data to be cached or stored, so Coast
 never writes it to disk. Tides are fetched live when the panel opens (two
-requests: the station list and that station's events), then again every 15
-minutes while it stays open or when you refresh. In between, the open panel
+requests: the station list and that station's events), then at most hourly
+while it stays open (predictions don't change), or when you refresh. If ADMIRALTY
+can't be reached or your monthly quota is used up, the panel says "Tide data
+temporarily unavailable" and tries again an hour later (or on Refresh). The
+portal's analytics show your usage, and ADMIRALTY emails a warning at 75% of
+the quota. In between, the open panel
 keeps them in memory so the countdown can tick, and drops them when it closes.
 With the panel closed, only weather and currents update, so the bar tooltip
 shows no tide.

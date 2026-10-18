@@ -74,16 +74,19 @@ Panel {
     function value(v, suffix) { return typeof v === "number" && isFinite(v) ? v.toFixed(1) + suffix : "—" }
     function temperature(v) { return typeof v === "number" && isFinite(v) ? value(location.temperatureUnit === "F" ? v * 1.8 + 32 : v, location.temperatureUnit === "F" ? "°F" : "°C") : "—" }
     // ADMIRALTY Discovery data may not be cached or stored. Tides are fetched live only while
-    // the panel is open, held in memory so the countdown can tick, refetched every 15 minutes
-    // or on Refresh, and dropped when the panel closes. Closed, only weather and currents update.
+    // the panel is open, held in memory so the countdown can tick, and dropped when the panel
+    // closes. Predictions don't change, so an open panel refetches at most hourly, or on
+    // Refresh (Discovery allows 10,000 requests a month); a failed lookup keeps its note until
+    // then. Closed, only weather and currents update.
     property var tideHold: null
+    property string tideNoteHold: ""
     property real tideFetchedAt: 0
     property bool refreshPending: false
     function refresh(live) {
         if (fetcher.running || locationWorker.running) { refreshPending = true; return }
         var args = []
         if (opened)
-            args = live || !tideHold || Date.now() - tideFetchedAt > 15 * 60000 ? ["--tides"] : ["--held", JSON.stringify(tideHold)]
+            args = live || Date.now() - tideFetchedAt > 60 * 60000 ? ["--tides"] : tideHold ? ["--held", JSON.stringify(tideHold)] : []
         fetcher.command = python("coast.py", args)
         fetcher.running = true
     }
@@ -93,6 +96,7 @@ Panel {
     onOpenedChanged: {
         if (opened) { refresh(); return }
         tideHold = null
+        tideFetchedAt = 0
         report = withoutTides(report)
     }
     function showLocations() {
@@ -173,6 +177,7 @@ Panel {
                 // Never relabel the previous location's readings as the new beach.
                 root.report = {location: response.active}
                 root.tideHold = null
+                root.tideFetchedAt = 0
                 root.failure = ""
                 root.choosingLocation = false
                 root.favouritesOpen = false
@@ -194,7 +199,11 @@ Panel {
             root.failure = ""
             // Closed while fetching: keep nothing from ADMIRALTY.
             if (!root.opened) { root.report = root.withoutTides(next); return }
-            if (command.indexOf("--tides") >= 0) { root.tideHold = next.tideHold || null; root.tideFetchedAt = Date.now() }
+            if (command.indexOf("--tides") >= 0) {
+                root.tideHold = next.tideHold || null
+                root.tideNoteHold = next.tideNote || (next.tideHold ? "" : "Tide data temporarily unavailable")
+                root.tideFetchedAt = Date.now()
+            } else if (!root.tideHold) next.tideNote = root.tideNoteHold
             root.report = next
         }
     }
