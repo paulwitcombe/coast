@@ -17,7 +17,6 @@ from location import DEFAULT_LOCATION, load_location
 from temperatures import readings
 import tides as admiralty
 
-ZONE = ZoneInfo("Europe/London")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))) / "omarchy-coast"
 
 def number(value):
@@ -26,7 +25,7 @@ def number(value):
 def bearing(value):
     return ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"][int((value % 360 + 11.25) / 22.5) % 16] if number(value) else "—"
 
-def local(timestamp, fmt="%H:%M", zone=ZONE):
+def local(timestamp, fmt, zone):
     return dt.datetime.fromtimestamp(timestamp, zone).strftime(fmt)
 
 def parse_model(raw):
@@ -50,7 +49,8 @@ def fetch_live(url, parser, headers=None):
     except Exception as error:
         return {"data": None, "fetched": None, "error": str(error)}
 
-def fetch(name, url, parser, ttl, headers=None):
+def fetch(name, url, parser, ttl):
+    """Open-Meteo feeds, cached on disk for ttl seconds; a failure falls back to the cached copy."""
     path = CACHE / (name + "-" + hashlib.sha256(url.encode()).hexdigest()[:16] + ".json")
     cached = None
     try:
@@ -60,7 +60,7 @@ def fetch(name, url, parser, ttl, headers=None):
     except (OSError, ValueError, KeyError):
         cached = None
     try:
-        result = {"data": parser(download(url, headers)), "fetched": time.time(), "error": None}
+        result = {"data": parser(download(url)), "fetched": time.time(), "error": None}
         CACHE.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(mode="w", dir=CACHE, delete=False) as f:
             try:
@@ -119,10 +119,7 @@ def grid_distance(location, model):
     """Distance from selected shore location to the returned offshore grid cell."""
     if not all(number(model.get(key)) for key in ("latitude", "longitude")):
         return None
-    lat1, lat2 = map(math.radians, (location["latitude"], model["latitude"]))
-    delta_lon = math.radians(model["longitude"] - location["longitude"])
-    a = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(delta_lon/2)**2
-    return round(6371 * 2 * math.asin(math.sqrt(min(1, max(0, a)))), 1)
+    return round(admiralty.distance_km(location["latitude"], location["longitude"], model["latitude"], model["longitude"]), 1)
 
 def build_report(sources, now=None, location=None, station=None):
     now = time.time() if now is None else now
@@ -162,8 +159,7 @@ def build_report(sources, now=None, location=None, station=None):
             velocity = knots(hourly.get("ocean_current_velocity", [])[i], md.get("hourly_units", {}).get("ocean_current_velocity"))
             angle = hourly.get("ocean_current_direction", [])[i] if velocity is not None and velocity > 0 else None
             forecast.append({"time": at(stamp), "speed": velocity, "direction": angle, "bearing": bearing(angle)})
-    warnings = ["Tides: unavailable"] if tides["error"] and not tides.get("note") else []
-    warnings += [name + ": cached / unavailable" for name, source in (("Weather", weather), ("Currents", marine)) if source["error"]]
+    warnings = [name + ": cached / unavailable" for name, source in (("Weather", weather), ("Currents", marine)) if source["error"]]
     if tides.get("note"): warnings.append(tides["note"])
     if not w: warnings.append("Weather conditions unavailable or expired")
     if not m: warnings.append("Current conditions unavailable or expired")
@@ -194,17 +190,13 @@ def source_urls(location):
         "hourly": "ocean_current_velocity,ocean_current_direction", "timeformat": "unixtime", "forecast_days": 2})
     return weather, marine
 
-
 UNAVAILABLE = "Tide data temporarily unavailable"
-
 
 def no_tides(note):
     return {"data": None, "fetched": None, "error": note, "note": note}
 
-
 # The panel is closed: tides are not fetched, so nothing from ADMIRALTY is held.
 SKIPPED = {"data": None, "fetched": None, "error": None, "note": None, "skipped": True}
-
 
 def held_tides(text):
     """Events the open panel already holds in memory, passed back on its next tick."""
@@ -213,7 +205,6 @@ def held_tides(text):
     if not events or not number(held.get("fetched")):
         raise ValueError("No held tide events")
     return {"data": events, "fetched": held["fetched"], "error": None}, held.get("station")
-
 
 def tide_source(location):
     """Live events for the nearest ADMIRALTY station, or a reason there are none.
@@ -236,7 +227,6 @@ def tide_source(location):
     # Quota exceeded (403), outages and bad replies all read the same in the panel.
     return (events, station) if events["data"] else (no_tides(UNAVAILABLE), None)
 
-
 def main(args=sys.argv[1:]):
     """No arguments: weather and currents only. --tides: fetch tides live. --held JSON: reuse the panel's."""
     location = load_location()
@@ -244,12 +234,14 @@ def main(args=sys.argv[1:]):
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         weather = pool.submit(fetch, "weather", weather_url, parse_model, 900)
         marine = pool.submit(fetch, "marine", marine_url, parse_model, 900)
+        tides, station = SKIPPED, None
+        if args[:1] == ["--held"] and len(args) > 1:
+            try:
+                tides, station = held_tides(args[1])
+            except (ValueError, KeyError, TypeError, AttributeError):
+                args = ["--tides"]
         if args[:1] == ["--tides"]:
-            tides, station = pool.submit(tide_source, location).result()
-        elif args[:1] == ["--held"] and len(args) > 1:
-            tides, station = held_tides(args[1])
-        else:
-            tides, station = SKIPPED, None
+            tides, station = tide_source(location)
         print(json.dumps(build_report([tides, weather.result(), marine.result()], location=location, station=station), allow_nan=False))
 
 if __name__ == "__main__":

@@ -1,9 +1,5 @@
-import json
-from pathlib import Path
-import tempfile
 import unittest
-from coast import build_report, source_urls
-from location import load_location, DEFAULT_LOCATION
+from coast import build_report
 from temperatures import readings, wind_chill
 
 
@@ -37,24 +33,6 @@ class TemperatureTests(unittest.TestCase):
         self.assertIsNone(build_report(sources, now=18000)['temperatures']['sea'])
         marine['data']['current_units']['sea_surface_temperature'] = '°F'
         self.assertIsNone(build_report(sources, now=10000)['temperatures']['sea'])
-
-    def test_location_isolation_and_validation(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder)/'location.json'
-            self.assertEqual(load_location(path), DEFAULT_LOCATION)
-            location = {'name': 'Sydney', 'latitude': -33.89, 'longitude': 151.28, 'timezone': 'Australia/Sydney', 'temperatureUnit': 'F'}
-            path.write_text(json.dumps(location))
-            loaded = load_location(path)
-            self.assertNotIn('tideUrl', loaded)
-            self.assertEqual(loaded['marineLatitude'], -33.89)
-            self.assertNotEqual(source_urls(loaded), source_urls(DEFAULT_LOCATION))
-            empty = {'data': None, 'fetched': None, 'error': None}
-            report = build_report([empty]*3, now=0, location=loaded)
-            self.assertEqual(report['updated'], '10:00')
-            location['latitude'] = 91
-            path.write_text(json.dumps(location))
-            with self.assertRaises(ValueError):
-                load_location(path)
 
 
 if __name__ == '__main__':

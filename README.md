@@ -23,6 +23,14 @@ Requires Omarchy with its shell (Quickshell) and Python 3.
 omarchy plugin add https://github.com/paulwitcombe/coast --enable
 ```
 
+This clones the plugin into `~/.config/omarchy/plugins/pdog.coast`, validates it
+and puts the wave icon in the bar (left section by default). Then:
+
+- Open: click the icon, or `omarchy-shell pdog.coast open`
+- Update: `omarchy plugin update pdog.coast`
+- Disable: `omarchy plugin disable pdog.coast`
+- Remove: `omarchy plugin remove pdog.coast`
+
 ### Tide times (UK): free ADMIRALTY key
 
 Weather, currents and temperatures work straight away. Tide times come from the
@@ -45,22 +53,15 @@ UK Hydrographic Office's ADMIRALTY UK Tidal API, which needs a free key:
 The Discovery terms don't allow tide data to be cached or stored, so Coast
 never writes it to disk. Tides are fetched live when the panel opens (two
 requests: the station list and that station's events), then at most hourly
-while it stays open (predictions don't change), or when you refresh. If ADMIRALTY
-can't be reached or your monthly quota is used up, the panel says "Tide data
-temporarily unavailable" and tries again an hour later (or on Refresh). The
-portal's analytics show your usage, and ADMIRALTY emails a warning at 75% of
-the quota. In between, the open panel
-keeps them in memory so the countdown can tick, and drops them when it closes.
-With the panel closed, only weather and currents update, so the bar tooltip
-shows no tide.
+while it stays open (predictions don't change), or when you refresh. In
+between, the open panel keeps them in memory so the countdown can tick, and
+drops them when it closes. With the panel closed, only weather and currents
+update, so the bar tooltip shows no tide.
 
-This clones the plugin into `~/.config/omarchy/plugins/pdog.coast`, validates it
-and puts the wave icon in the bar (left section by default). Then:
-
-- Open: click the icon, or `omarchy-shell pdog.coast open`
-- Update: `omarchy plugin update pdog.coast`
-- Disable: `omarchy plugin disable pdog.coast`
-- Remove: `omarchy plugin remove pdog.coast`
+Discovery allows 10,000 requests a month. If ADMIRALTY can't be reached or the
+quota is used up, the panel says "Tide data temporarily unavailable" and tries
+again an hour later (or on Refresh). The portal's analytics show your usage,
+and ADMIRALTY emails a warning at 75% of the quota.
 
 ## Panel layout
 
@@ -110,9 +111,9 @@ separately labelled **from**.
 No new packages required. Uses Python 3 and the existing Omarchy shell.
 Weather/marine feeds are cached for 15 minutes under `~/.cache/omarchy-coast`.
 Tide data is never cached (see [the key section](#tide-times-uk-free-admiralty-key)).
-Failed weather/marine requests retain cached data with a warning; current conditions older than 2 hours are
-hidden. Times use the location's timezone with automatic daylight-saving
-changes. Without a key, or away from UK stations, the panel says why there are
+Failed weather/marine requests retain cached data with a warning; current
+conditions older than 2 hours are hidden. Times use the location's timezone
+with automatic daylight-saving changes. Without a key, or away from UK stations, the panel says why there are
 no tide times rather than estimating them.
 
 Sources:
@@ -174,7 +175,7 @@ location in the saved state file. Before any picker selection, a legacy
 }
 ```
 
-Use an IANA timezone and `C` or `F` for display. Assessment inputs remain Celsius.
+Use an IANA timezone and `C` or `F` for display.
 `country` is optional. Marine coordinates default to the supplied land
 coordinates if omitted; select an appropriate offshore point for better coverage.
 Cache filenames include the source URL hash, keeping locations separate. Invalid

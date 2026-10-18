@@ -4,7 +4,7 @@
   "name": "Coast",
   "version": "1.1.0",
   "author": "pdog",
-  "description": "Tides, weather, swim temperatures and offshore current compass for any coast",
+  "description": "UK tide times, coastal weather, sea temperature and an offshore current compass",
   "kinds": [
     "bar-widget"
   ],

@@ -213,7 +213,7 @@ Panel {
         anchors.fill: parent
         bar: root.bar
         text: "󰞍"
-        tooltipText: (root.location.name || "Coast") + " · " + root.temperature(root.weather.temperature_2m) + " · " + root.arrow(root.marine.direction) + " " + root.value(root.marine.speed, " kn") + (root.report.nextTide ? "\nNext " + root.report.nextTide.kind + " tide " + root.report.nextTide.label : "")
+        tooltipText: (root.location.name || "Coast") + " · " + root.temperature(root.weather.temperature_2m) + " · " + root.arrow(root.marine.direction) + " " + root.value(root.marine.speed, " kn")
         onPressed: function(b) { if (b === Qt.MiddleButton) root.refresh(true); else root.toggle() }
     }
     KeyboardPanel {
@@ -397,88 +397,88 @@ Panel {
                                 id: tideText
                                 width: parent.width
                                 spacing: Style.space(7)
-                            Label { text: "NEXT TIDE"; opacity: 0.65; font.pixelSize: Style.font.bodySmall; font.letterSpacing: 1 }
-                            Label {
-                                visible: !!tideSummary.next
-                                text: tideSummary.next ? (tideSummary.next.kind === "high" ? "↑ High " : "↓ Low ") + tideSummary.next.label.slice(-5) : ""
-                                font.pixelSize: Style.font.display; font.bold: true; color: Color.accent
+                                Label { text: "NEXT TIDE"; opacity: 0.65; font.pixelSize: Style.font.bodySmall; font.letterSpacing: 1 }
+                                Label {
+                                    visible: !!tideSummary.next
+                                    text: tideSummary.next ? (tideSummary.next.kind === "high" ? "↑ High " : "↓ Low ") + tideSummary.next.label.slice(-5) : ""
+                                    font.pixelSize: Style.font.display; font.bold: true; color: Color.accent
+                                }
+                                Label {
+                                    visible: !!tideSummary.next
+                                    text: tideSummary.next ? tideSummary.next.due + " · " + tideSummary.next.height.toFixed(1) + " m" : ""
+                                }
+                                Label {
+                                    visible: !!tideSummary.then
+                                    text: tideSummary.then ? "Then " + tideSummary.then.kind + " " + tideSummary.then.label.slice(-5) + " · " + tideSummary.then.height.toFixed(1) + " m" : ""
+                                    font.pixelSize: Style.font.bodySmall; opacity: 0.65
+                                }
+                                Label {
+                                    visible: !tideSummary.next
+                                    width: parent.width; wrapMode: Text.WordWrap
+                                    text: fetcher.running ? "Loading tide times…" : (root.report.tideNote || "Tide times unavailable")
+                                    font.pixelSize: Style.font.bodySmall; opacity: 0.65
+                                }
                             }
-                            Label {
-                                visible: !!tideSummary.next
-                                text: tideSummary.next ? tideSummary.next.due + " · " + tideSummary.next.height.toFixed(1) + " m" : ""
-                            }
-                            Label {
-                                visible: !!tideSummary.then
-                                text: tideSummary.then ? "Then " + tideSummary.then.kind + " " + tideSummary.then.label.slice(-5) + " · " + tideSummary.then.height.toFixed(1) + " m" : ""
-                                font.pixelSize: Style.font.bodySmall; opacity: 0.65
-                            }
-                            Label {
-                                visible: !tideSummary.next
-                                width: parent.width; wrapMode: Text.WordWrap
-                                text: fetcher.running ? "Loading tide times…" : (root.report.tideNote || "Tide times unavailable")
-                                font.pixelSize: Style.font.bodySmall; opacity: 0.65
-                            }
-                            }
-                                Item {
-                                    id: tideChart
-                                    visible: !!tideSummary.curve
-                                    width: parent.width
-                                    anchors.top: tideText.bottom; anchors.topMargin: Style.space(10)
-                                    anchors.bottom: tideAxis.top; anchors.bottomMargin: Style.space(4)
-                                    readonly property var nowPoint: root.tidePoint(tideSummary.curve, tideSummary.curve ? tideSummary.curve.now : 0, width, height)
-                                    Shape {
-                                        anchors.fill: parent
-                                        preferredRendererType: Shape.CurveRenderer
-                                        ShapePath {
-                                            strokeColor: "transparent"
-                                            fillColor: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.12)
-                                            PathSvg { path: root.tidePath(tideSummary.curve, tideChart.width, tideChart.height, true) }
-                                        }
-                                        ShapePath {
-                                            strokeColor: Color.accent; strokeWidth: 1.5
-                                            fillColor: "transparent"
-                                            capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
-                                            PathSvg { path: root.tidePath(tideSummary.curve, tideChart.width, tideChart.height, false) }
-                                        }
+                            Item {
+                                id: tideChart
+                                visible: !!tideSummary.curve
+                                width: parent.width
+                                anchors.top: tideText.bottom; anchors.topMargin: Style.space(10)
+                                anchors.bottom: tideAxis.top; anchors.bottomMargin: Style.space(4)
+                                readonly property var nowPoint: root.tidePoint(tideSummary.curve, tideSummary.curve ? tideSummary.curve.now : 0, width, height)
+                                Shape {
+                                    anchors.fill: parent
+                                    preferredRendererType: Shape.CurveRenderer
+                                    ShapePath {
+                                        strokeColor: "transparent"
+                                        fillColor: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.12)
+                                        PathSvg { path: root.tidePath(tideSummary.curve, tideChart.width, tideChart.height, true) }
                                     }
-                                    Repeater {
-                                        model: tideSummary.curve ? tideSummary.curve.events : []
-                                        Rectangle {
-                                            required property var modelData
-                                            readonly property var point: root.tidePoint(tideSummary.curve, modelData.x, tideChart.width, tideChart.height)
-                                            visible: !!point
-                                            x: point ? point.x - width / 2 : 0; y: point ? point.y - height / 2 : 0
-                                            width: Style.space(5); height: width; radius: width / 2
-                                            color: Color.accent; opacity: 0.6
-                                        }
-                                    }
-                                    Rectangle {
-                                        x: tideSummary.curve ? tideSummary.curve.now * tideChart.width : 0
-                                        width: 1; height: parent.height
-                                        color: root.ink; opacity: 0.3
-                                    }
-                                    Rectangle {
-                                        visible: !!tideChart.nowPoint
-                                        x: tideChart.nowPoint ? tideChart.nowPoint.x - width / 2 : 0
-                                        y: tideChart.nowPoint ? tideChart.nowPoint.y - height / 2 : 0
-                                        width: Style.space(9); height: width; radius: width / 2
-                                        color: Color.accent; border.color: Color.popups.background; border.width: Style.space(2)
+                                    ShapePath {
+                                        strokeColor: Color.accent; strokeWidth: 1.5
+                                        fillColor: "transparent"
+                                        capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
+                                        PathSvg { path: root.tidePath(tideSummary.curve, tideChart.width, tideChart.height, false) }
                                     }
                                 }
-                                Item {
-                                    id: tideAxis
-                                    anchors.bottom: parent.bottom
-                                    visible: !!tideSummary.curve
-                                    width: parent.width
-                                    height: nowLabel.implicitHeight
-                                    Label { text: "−6h"; font.pixelSize: Style.font.bodySmall; opacity: 0.5 }
-                                    Label {
-                                        id: nowLabel
-                                        x: (tideSummary.curve ? tideSummary.curve.now * parent.width : 0) - width / 2
-                                        text: "now"; font.pixelSize: Style.font.bodySmall; opacity: 0.65
+                                Repeater {
+                                    model: tideSummary.curve ? tideSummary.curve.events : []
+                                    Rectangle {
+                                        required property var modelData
+                                        readonly property var point: root.tidePoint(tideSummary.curve, modelData.x, tideChart.width, tideChart.height)
+                                        visible: !!point
+                                        x: point ? point.x - width / 2 : 0; y: point ? point.y - height / 2 : 0
+                                        width: Style.space(5); height: width; radius: width / 2
+                                        color: Color.accent; opacity: 0.6
                                     }
-                                    Label { anchors.right: parent.right; text: "+18h"; font.pixelSize: Style.font.bodySmall; opacity: 0.5 }
                                 }
+                                Rectangle {
+                                    x: tideSummary.curve ? tideSummary.curve.now * tideChart.width : 0
+                                    width: 1; height: parent.height
+                                    color: root.ink; opacity: 0.3
+                                }
+                                Rectangle {
+                                    visible: !!tideChart.nowPoint
+                                    x: tideChart.nowPoint ? tideChart.nowPoint.x - width / 2 : 0
+                                    y: tideChart.nowPoint ? tideChart.nowPoint.y - height / 2 : 0
+                                    width: Style.space(9); height: width; radius: width / 2
+                                    color: Color.accent; border.color: Color.popups.background; border.width: Style.space(2)
+                                }
+                            }
+                            Item {
+                                id: tideAxis
+                                anchors.bottom: parent.bottom
+                                visible: !!tideSummary.curve
+                                width: parent.width
+                                height: nowLabel.implicitHeight
+                                Label { text: "−6h"; font.pixelSize: Style.font.bodySmall; opacity: 0.5 }
+                                Label {
+                                    id: nowLabel
+                                    x: (tideSummary.curve ? tideSummary.curve.now * parent.width : 0) - width / 2
+                                    text: "now"; font.pixelSize: Style.font.bodySmall; opacity: 0.65
+                                }
+                                Label { anchors.right: parent.right; text: "+18h"; font.pixelSize: Style.font.bodySmall; opacity: 0.5 }
+                            }
                         }
                     }
                     Rectangle { width: parent.width; height: 1; color: root.ink; opacity: 0.15 }
@@ -644,7 +644,7 @@ Panel {
                                     }
                                 }
                                 Label { visible: !root.report.nextTide; width: parent.width; wrapMode: Text.WordWrap; text: fetcher.running ? "Loading tide times…" : (root.report.tideNote || "Tide times unavailable"); opacity: 0.7 }
-                                Label { id: tideNote; visible: !!root.report.tideStation; width: parent.width; wrapMode: Text.WordWrap; text: root.report.tideStation ? "Station: " + root.report.tideStation.name + " · " + root.report.tideStation.distance + " km\nChart datum · curve approximate" : ""; opacity: 0.6; font.pixelSize: Style.font.bodySmall }
+                                Label { visible: !!root.report.tideStation; width: parent.width; wrapMode: Text.WordWrap; text: root.report.tideStation ? "Station: " + root.report.tideStation.name + " · " + root.report.tideStation.distance + " km\nChart datum · curve approximate" : ""; opacity: 0.6; font.pixelSize: Style.font.bodySmall }
                             }
                             Rectangle { width: 1; height: tideList.height; color: root.ink; opacity: 0.15 }
                             Item {

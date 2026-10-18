@@ -1,7 +1,6 @@
-import datetime as dt
 import unittest
 from location import DEFAULT_LOCATION
-from coast import ZONE, bearing, knots, parse_model, build_report, conditions, countdown, tide_curve
+from coast import bearing, knots, parse_model, build_report, conditions, countdown, tide_curve
 
 class CoastTests(unittest.TestCase):
     def test_bearings_and_units(self):

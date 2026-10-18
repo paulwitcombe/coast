@@ -135,6 +135,7 @@ def search_results(data):
         except (ValueError, TypeError, KeyError):
             continue
         if location["name"].lower() == "bournemouth" and abs(location["latitude"] - DEFAULT_LOCATION["latitude"]) < 0.05 and abs(location["longitude"] - DEFAULT_LOCATION["longitude"]) < 0.05:
+            # Keeps the default's postcode label and offshore marine point.
             location = dict(DEFAULT_LOCATION)
         results.append(location)
     return results

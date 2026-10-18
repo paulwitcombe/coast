@@ -4,8 +4,9 @@ from pathlib import Path
 import tempfile
 import unittest
 import urllib.error
+from zoneinfo import ZoneInfo
 from unittest.mock import patch
-from coast import SKIPPED, ZONE, build_report, held_tides, no_tides, tide_source
+from coast import SKIPPED, build_report, held_tides, no_tides, tide_source
 from location import DEFAULT_LOCATION
 import tides
 
@@ -15,6 +16,9 @@ STATIONS = json.dumps({"type": "FeatureCollection", "features": [
     {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-1.95, 50.68]},
      "properties": {"Id": "0036", "Name": "Poole (Entrance)", "Country": "England"}},
     {"type": "Feature", "geometry": None, "properties": {"Id": "bad"}}]})
+
+
+ZONE = ZoneInfo("Europe/London")
 
 
 class TideTests(unittest.TestCase):

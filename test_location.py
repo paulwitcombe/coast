@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from location import DEFAULT_LOCATION, country_abbreviation, country_for_timezone, saved_locations, select_location, search_results, validate_location, load_location, toggle_favourite
-from coast import build_report, grid_distance
+from coast import build_report, grid_distance, source_urls
 
 SYDNEY = {'name': 'Sydney', 'latitude': -33.86785, 'longitude': 151.20732, 'timezone': 'Australia/Sydney', 'detail': 'New South Wales · Australia'}
 
@@ -42,7 +42,6 @@ class LocationTests(unittest.TestCase):
             with patch('location.STATE_PATH', path):
                 self.assertEqual(load_location()['name'], 'Sydney')
             self.assertEqual(state['active']['temperatureUnit'], 'F')
-            self.assertNotIn('tideUrl', state['active'])
             state = select_location(dict(SYDNEY, temperatureUnit='C'), path)
             self.assertEqual(len(state['saved']), 2)
             self.assertEqual(state['saved'][0]['temperatureUnit'], 'C')
@@ -72,11 +71,31 @@ class LocationTests(unittest.TestCase):
         self.assertEqual(len(results),2)
         self.assertNotEqual(results[0]['detail'], results[1]['detail'])
         self.assertNotEqual(results[0]['timezone'], results[1]['timezone'])
-        self.assertTrue(all('tideUrl' not in x for x in results))
 
-    def test_bournemouth_search_restores_supported_tides(self):
+    def test_bournemouth_search_returns_default(self):
         result = search_results({'results': [DEFAULT_LOCATION]})[0]
         self.assertEqual(result, DEFAULT_LOCATION)
+
+    def test_saved_met_office_url_is_dropped(self):
+        self.assertNotIn('tideUrl', validate_location(dict(SYDNEY, tideUrl='https://example.invalid')))
+
+    def test_location_isolation_and_validation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/'location.json'
+            self.assertEqual(load_location(path), DEFAULT_LOCATION)
+            location = {'name': 'Sydney', 'latitude': -33.89, 'longitude': 151.28, 'timezone': 'Australia/Sydney', 'temperatureUnit': 'F'}
+            path.write_text(json.dumps(location))
+            loaded = load_location(path)
+            self.assertEqual(loaded['marineLatitude'], -33.89)
+            self.assertNotEqual(source_urls(loaded), source_urls(DEFAULT_LOCATION))
+            empty = {'data': None, 'fetched': None, 'error': None}
+            report = build_report([empty]*3, now=0, location=loaded)
+            self.assertEqual(report['updated'], '10:00')
+            location['latitude'] = 91
+            path.write_text(json.dumps(location))
+            with self.assertRaises(ValueError):
+                load_location(path)
+
 
     def test_distant_marine_grid_hidden(self):
         location = validate_location(SYDNEY)
