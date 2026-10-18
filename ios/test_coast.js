@@ -112,3 +112,43 @@ test("panel shows an escaped notice and the Update Coast button", () => {
   assert.ok(html.includes("Updated &lt;b&gt;now&lt;/b&gt;"))
   assert.ok(html.includes('data-action="update"'))
 })
+
+test("a slow service doesn't hold up the panel", async () => {
+  const now = Date.now() / 1000
+  let release
+  const marineArrives = new Promise(r => { release = r })
+  const getJSON = async url => {
+    if (url.includes("marine-api")) { await marineArrives; return {latitude: 50.7, longitude: -1.88, current: {time: now, wave_height: 0.6}, current_units: {}} }
+    if (url.includes("api.open-meteo")) return {current: {time: now, temperature_2m: 10, weather_code: 1}, current_units: {temperature_2m: "°C"}}
+    throw new Error("offline")
+  }
+  const partials = []
+  const done = coast.loadReport(coast.DEFAULT_LOCATION, null, getJSON, {
+    wait: ms => new Promise(r => setTimeout(r, 5)), partialAfter: 5,
+    onPartial: report => { partials.push(report); release() }})
+  const final = await done
+  assert.strictEqual(partials.length, 1)
+  assert.strictEqual(partials[0].temperatures.air, 10)
+  assert.ok(partials[0].warnings.includes("Still loading currents…"))
+  assert.ok(!partials[0].warnings.some(w => w.startsWith("Current conditions")))
+  assert.strictEqual(final.marine.wave, 0.6)
+  assert.ok(!final.warnings.some(w => w.startsWith("Still loading")))
+})
+
+test("a failed Open-Meteo feed falls back to its last reading", async () => {
+  const now = Date.now() / 1000
+  const kept = {}
+  const cache = {get: n => kept[n], set: (n, v) => { kept[n] = v }}
+  const marine = {latitude: 50.7, longitude: -1.88, current: {time: now, wave_height: 0.6}, current_units: {}}
+  let up = true
+  const getJSON = async url => {
+    if (url.includes("marine-api") && up) return marine
+    throw new Error("offline")
+  }
+  await coast.loadReport(coast.DEFAULT_LOCATION, null, getJSON, {cache})
+  up = false
+  const report = await coast.loadReport(coast.DEFAULT_LOCATION, null, getJSON, {cache})
+  assert.strictEqual(report.marine.wave, 0.6)
+  assert.ok(report.warnings.includes("Currents: cached / unavailable"))
+  assert.ok(!("tides" in kept))
+})

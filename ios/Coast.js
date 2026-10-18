@@ -208,11 +208,35 @@ async function tideSource(location, key, getJSON) {
   return events.data ? {source: events, station} : {source: noTides(UNAVAILABLE), station: null}
 }
 
-async function loadReport(location, key, getJSON) {
+// Open-Meteo readings may be kept (unlike tides): the last good one stands in, marked
+// cached, when the service fails. buildReport still hides conditions over 2 hours old.
+async function modelSource(name, url, getJSON, cache) {
+  const fresh = await source(getJSON, url, parseModel)
+  if (!cache) return fresh
+  if (fresh.data) { cache.set(name, {url, data: fresh.data, fetched: fresh.fetched}); return fresh }
+  const kept = cache.get(name)
+  return kept && kept.url === url ? {data: kept.data, fetched: kept.fetched, error: fresh.error} : fresh
+}
+
+const LOADING = {data: null, fetched: null, error: null, loading: true}
+
+// opts.cache keeps Open-Meteo readings; with opts.onPartial and opts.wait, a report of
+// whatever has arrived is handed over after opts.partialAfter ms, so one slow service
+// doesn't hold up the panel.
+async function loadReport(location, key, getJSON, opts = {}) {
   const urls = sourceUrls(location)
-  const [weather, marine, tides] = await Promise.all([
-    source(getJSON, urls.weather, parseModel), source(getJSON, urls.marine, parseModel), tideSource(location, key, getJSON)])
-  return buildReport([tides.source, weather, marine], Date.now() / 1000, location, tides.station)
+  let weather = LOADING, marine = LOADING, tides = {source: LOADING, station: null}
+  const build = () => buildReport([tides.source, weather, marine], Date.now() / 1000, location, tides.station)
+  const all = Promise.all([
+    modelSource("weather", urls.weather, getJSON, opts.cache).then(s => { weather = s }),
+    modelSource("marine", urls.marine, getJSON, opts.cache).then(s => { marine = s }),
+    tideSource(location, key, getJSON).then(t => { tides = t })])
+  if (opts.onPartial && opts.wait) {
+    const slow = await Promise.race([all.then(() => false), opts.wait(opts.partialAfter || 4000).then(() => true)])
+    if (slow) await opts.onPartial(build())
+  }
+  await all
+  return build()
 }
 
 function buildReport(sources, now, location, station) {
@@ -248,19 +272,21 @@ function buildReport(sources, now, location, station) {
     const angle = velocity !== null && velocity > 0 ? (hourly.ocean_current_direction || [])[i] : null
     forecast.push({time: clock(stamp, zone), speed: velocity, direction: angle, bearing: bearing(angle)})
   })
-  const warnings = [["Weather", weather], ["Currents", marine]].filter(([, s]) => s.error).map(([name]) => name + ": unavailable")
+  const warnings = [["Weather", weather], ["Currents", marine]].filter(([, s]) => s.error).map(([name, s]) => name + (s.data ? ": cached / unavailable" : ": unavailable"))
+  const loading = [["tides", tides], ["weather", weather], ["currents", marine]].filter(([, s]) => s.loading).map(([name]) => name)
+  if (loading.length) warnings.push("Still loading " + loading.join(", ") + "…")
   if (tides.note) warnings.push(tides.note)
-  if (!Object.keys(w).length) warnings.push("Weather conditions unavailable or expired")
-  if (!Object.keys(m).length) warnings.push("Current conditions unavailable or expired")
+  if (!weather.loading && !Object.keys(w).length) warnings.push("Weather conditions unavailable or expired")
+  if (!marine.loading && !Object.keys(m).length) warnings.push("Current conditions unavailable or expired")
   if (!nearby) warnings.push("No nearby marine grid: offshore readings withheld (more than 30 km from this location)")
-  if (!tides.note && !upcoming.length) warnings.push("No upcoming tide times available")
+  if (!tides.loading && !tides.note && !upcoming.length) warnings.push("No upcoming tide times available")
   const fetched = s => s.fetched ? dateClock(s.fetched, zone) : "never"
   return {
     updated: clock(now, zone), tides: events.slice(0, 12), location, temperatures,
     nextTide: upcoming[0] ? Object.assign({}, upcoming[0], {due: countdown(upcoming[0].time - now)}) : null,
     followingTide: upcoming[1] || null,
     tideCurve: tideCurve(tides.data || [], now),
-    tideStation: tides.data ? station : null, tideNote: tides.note || null,
+    tideStation: tides.data ? station : null, tideNote: tides.loading ? "Loading tide times…" : tides.note || null,
     weather: Object.assign({}, w, {summary: conditions(w.weather_code), windBearing: bearing(w.wind_direction_10m)}),
     marine: {speed, direction, bearing: bearing(direction), wave: number(m.wave_height) ? m.wave_height : null,
       temperature: temperatures.sea, time: m.time ? clock(m.time, zone) : "—", latitude: md.latitude, longitude: md.longitude, distance},
@@ -738,6 +764,15 @@ async function selfUpdate(announce) {
   return done
 }
 
+// The last good Open-Meteo reading per feed. Never tide data.
+function modelCache() {
+  const fm = FileManager.local(), path = fm.joinPath(fm.documentsDirectory(), "coast-openmeteo.json")
+  let kept = {}
+  try { kept = JSON.parse(fm.readString(path)) || {} } catch (e) { kept = {} }
+  return {get: name => kept[name], set: (name, value) => { kept[name] = value; try { fm.writeString(path, JSON.stringify(kept)) } catch (e) {} }}
+}
+function wait(ms) { return new Promise(resolve => Timer.schedule(ms, false, resolve)) }
+
 // Locations, favourites and units only: never tide data.
 const STATE_FILE = "coast-state.json"
 function stateFiles() { const fm = FileManager.local(); return {fm, path: fm.joinPath(fm.documentsDirectory(), STATE_FILE)} }
@@ -784,7 +819,7 @@ async function runWidget() {
   const location = widgetLocation(state)
   const key = storedKey()
   let report = null, problem = null
-  try { report = await loadReport(location, key, scriptableJSON) } catch (e) { problem = "Coastal feeds unavailable." }
+  try { report = await loadReport(location, key, scriptableJSON, {cache: modelCache()}) } catch (e) { problem = "Coastal feeds unavailable." }
   if (!key && !problem) report.tideNote = "Open Coast in Scriptable to add your ADMIRALTY key"
   Script.setWidget(buildWidget(report, config.widgetFamily, THEME, problem))
 }
@@ -792,7 +827,13 @@ async function runWidget() {
 async function runApp() {
   const state = loadState()
   let key = storedKey() || await askForKey(false)
-  const load = async () => { try { return await loadReport(state.active, key, scriptableJSON) } catch (e) { return null } }
+  // Shows what has arrived after 4 seconds, then the rest when it comes.
+  const load = async () => {
+    try {
+      return await loadReport(state.active, key, scriptableJSON, {cache: modelCache(), wait, partialAfter: 4000,
+        onPartial: partial => open ? view.loadHTML(panelHTML(partial, state, THEME)) : null})
+    } catch (e) { return null }
+  }
   // Show the panel straight away, then fill it in when the feeds arrive.
   const view = new WebView()
   // Taps arrive as coast:// navigations; everything else (the page, its font) loads normally.

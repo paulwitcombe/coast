@@ -243,7 +243,11 @@ tide data is fetched live on every run and never stored. Widgets ask iOS to
 refresh at most hourly, so the phone uses about 1,500 of your 10,000 requests a
 month even with a widget on screen all day. The phone and laptop share the
 quota because they use the same key. Locations, favourites and units are saved
-in Scriptable's own folder on the phone.
+in Scriptable's own folder on the phone, with the last weather and currents
+reading from Open-Meteo, which stands in (marked cached) if the service is down.
+
+The panel appears at once and shows whatever has arrived after 4 seconds, so
+one slow service doesn't hold it up; the rest fills in when it comes.
 
 **Theme.** The script carries the Omarchy theme colours in a `THEME` line near
 the top (Tokyo Night by default). To match a different Omarchy theme, run
