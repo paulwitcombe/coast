@@ -353,7 +353,7 @@ function loadingHTML(state, theme) {
 <div class="indent" style="margin-top:18px">Loading tides, currents and weather…</div></main></body></html>`
 }
 
-function panelHTML(report, state, theme) {
+function panelHTML(report, state, theme, notice) {
   const r = report || {}, loc = r.location || state.active, unit = loc.temperatureUnit || "C"
   const marine = r.marine || {}, weather = r.weather || {}, temps = r.temperatures || {}
   const slack = number(marine.speed) && marine.speed < 0.3
@@ -420,6 +420,7 @@ input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--fg);
 }
 </style></head><body>
 <main class="panel">
+  ${notice ? `<p class="small accent" style="margin-bottom:12px">${escapeHTML(notice)}</p>` : ""}
   <section class="top">
     <div class="gap">
       <div class="heading">COAST</div>
@@ -452,7 +453,7 @@ input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--fg);
     ${state.recents.length ? `<div class="label accent" style="opacity:1;margin-top:14px">Recent locations</div>${list(state.recents, "recent")}` : ""}
     <div class="links" style="margin-top:14px"><span class="label">Temperature</span>
       <button data-action="unit:C">°C${unit === "C" ? " ✓" : ""}</button><button data-action="unit:F">°F${unit === "F" ? " ✓" : ""}</button>
-      <button data-action="key">ADMIRALTY key</button></div>
+      <button data-action="key">ADMIRALTY key</button><button data-action="update">Update Coast</button></div>
     <p class="small dim" style="margin-top:10px">Choose a coastal place. Offshore coverage varies; tide times cover UK coasts (ADMIRALTY). Search: Open-Meteo / GeoNames.</p>
     <hr>
   </section>
@@ -501,7 +502,10 @@ input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--fg);
 <script>
 // Scriptable waits on this; each tap sends one action back to the script.
 function send(action) { if (window.coastAction) { const done = window.coastAction; window.coastAction = null; done(action) } }
-document.addEventListener("click", e => { const b = e.target.closest("[data-action=refresh]"); if (b) b.textContent = "Updating…" }, true)
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-action=refresh], [data-action=update]")
+  if (b) b.textContent = b.dataset.action === "update" ? "Downloading…" : "Updating…"
+}, true)
 const found = []
 document.addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return
@@ -693,6 +697,39 @@ async function scriptableJSON(url, headers) {
   return JSON.parse(text)
 }
 
+// Downloads the latest Coast from GitHub and saves it over this script. The latest commit's
+// exact file is used because the plain link is cached for a few minutes; if GitHub's API
+// refuses (it limits requests per network), a fresh copy of main is used instead.
+const REPO = "paulwitcombe/coast"
+async function latestScript() {
+  try {
+    const latest = new Request("https://api.github.com/repos/" + REPO + "/commits/main")
+    latest.headers = {"Accept": "application/vnd.github+json"}
+    const commit = await latest.loadJSON()
+    if (/^[0-9a-f]{40}$/.test(commit.sha || "")) {
+      const request = new Request("https://raw.githubusercontent.com/" + REPO + "/" + commit.sha + "/ios/Coast.js")
+      const code = await request.loadString()
+      if (request.response.statusCode === 200) return {code, version: commit.sha.slice(0, 7)}
+    }
+  } catch (e) {}
+  const request = new Request("https://raw.githubusercontent.com/" + REPO + "/main/ios/Coast.js?fresh=" + Date.now())
+  const code = await request.loadString()
+  if (request.response.statusCode !== 200) throw new Error("GitHub answered " + request.response.statusCode)
+  return {code, version: "main " + new Date().toISOString().slice(0, 16).replace("T", " ")}
+}
+
+async function selfUpdate() {
+  const {code, version} = await latestScript()
+  if (!code.includes("Coast for iOS (Scriptable)") || !code.includes('const VERSION = "dev"')) throw new Error("the download wasn't the Coast script")
+  if (version === VERSION) return "Coast is already up to date (version " + version + ")."
+  const here = module.filename
+  const fm = here.includes("/Mobile Documents/") ? FileManager.iCloud() : FileManager.local()
+  const stamped = code.replace('const VERSION = "dev"', 'const VERSION = "' + version + '"')
+  fm.writeString(here, stamped)
+  if (fm.readString(here) !== stamped) throw new Error("saved, but reading it back gave a different file")
+  return "Updated to version " + version + ". Close and reopen Coast to use it; widgets catch up within the hour."
+}
+
 // Locations, favourites and units only: never tide data.
 const STATE_FILE = "coast-state.json"
 function stateFiles() { const fm = FileManager.local(); return {fm, path: fm.joinPath(fm.documentsDirectory(), STATE_FILE)} }
@@ -759,8 +796,11 @@ async function runApp() {
   while (open) {
     const action = await Promise.race([closed.then(() => null), view.evaluateJavaScript("window.coastAction = completion", true)])
     if (!action || !open) break
-    let fetchAgain = false
+    let fetchAgain = false, notice = ""
     if (action === "refresh") fetchAgain = true
+    else if (action === "update") {
+      try { notice = await selfUpdate() } catch (e) { notice = "Update failed: " + (e && e.message || e) + ". Check your connection and try again." }
+    }
     else if (action === "favourite") {
       const has = state.favourites.some(f => sameLocation(f, state.active))
       state.favourites = has ? state.favourites.filter(f => !sameLocation(f, state.active)) : state.favourites.concat([state.active])
@@ -786,7 +826,7 @@ async function runApp() {
       continue
     }
     if (fetchAgain) report = await load()
-    await view.loadHTML(panelHTML(report, state, THEME))
+    await view.loadHTML(panelHTML(report, state, THEME, notice))
   }
   Script.complete()
 }

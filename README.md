@@ -216,13 +216,18 @@ works anywhere without the laptop.
    https://raw.githubusercontent.com/paulwitcombe/coast/main/ios/install.js in
    Safari, select all and copy.
 3. In Scriptable, tap **+**, paste, name the new script **Install Coast** (not
-   Coast) and run it from its tile. It downloads `ios/Coast.js`
-   and saves it as the **Coast** script. Run the installer again to update.
+   Coast) and run it from its tile. It downloads `ios/Coast.js` and saves it as
+   the **Coast** script. You can delete the installer afterwards.
 4. Open **Coast** and paste your ADMIRALTY primary key when asked. It is stored
    in the iOS Keychain, not in the script.
 5. Add a Scriptable widget to the home screen or lock screen, long-press it,
    choose **Edit Widget** and pick **Coast**. Set **Parameter** to the name of a
    favourite (for example `Poole`) to pin that widget to it.
+
+**Updating.** In the Coast panel, tap **Change location**, then **Update
+Coast**. It downloads the latest version over itself; close and reopen Coast to
+use it. The panel's footer shows the version you're running. Always run Coast
+from its tile: running it from inside the editor uses the editor's copy.
 
 **What it shows**
 

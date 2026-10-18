@@ -105,3 +105,10 @@ test("current shows a pointing arrow, or slack below 0.3 kn", () => {
   assert.match(panel(0.2), /class="headline" style="color:var\(--sea\)">Slack</)
   assert.match(panel(0.2), /Unsettled · ↙ SW/)
 })
+
+test("panel shows an escaped notice and the Update Coast button", () => {
+  const report = coast.buildReport([empty, empty, empty], 0, coast.DEFAULT_LOCATION, null)
+  const html = coast.panelHTML(report, {active: coast.DEFAULT_LOCATION, favourites: [], recents: []}, coast.THEME, "Updated <b>now</b>")
+  assert.ok(html.includes("Updated &lt;b&gt;now&lt;/b&gt;"))
+  assert.ok(html.includes('data-action="update"'))
+})
