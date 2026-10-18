@@ -1,22 +1,46 @@
-// Installs or updates Coast in Scriptable. Paste into a new Scriptable script and run it.
-// Close Coast in the editor first: an open editor can save the old code back over the update.
+// Installs or updates Coast in Scriptable. Paste into a new Scriptable script and run it
+// from the script list (tap its tile), not from inside Coast's editor: an open editor runs
+// and can save back the old code.
 // Downloads ios/Coast.js from github.com/paulwitcombe/coast and saves it as the "Coast" script.
-// It asks GitHub for the latest commit first and downloads that exact version, because the
-// plain download link is cached for a few minutes and could hand back an older copy.
 const repo = "paulwitcombe/coast"
-const latest = new Request("https://api.github.com/repos/" + repo + "/commits/main")
-latest.headers = {"Accept": "application/vnd.github+json"}
-const commit = await latest.loadJSON()
-if (!/^[0-9a-f]{40}$/.test(commit.sha || "")) throw new Error("Could not find the latest version")
-const request = new Request("https://raw.githubusercontent.com/" + repo + "/" + commit.sha + "/ios/Coast.js")
-const code = await request.loadString()
-if (request.response.statusCode !== 200 || !code.includes("Coast for iOS (Scriptable)")) throw new Error("Download failed")
-let fm = FileManager.iCloud()
-try { fm.documentsDirectory() } catch (e) { fm = FileManager.local() }
-fm.writeString(fm.joinPath(fm.documentsDirectory(), "Coast.js"), code.replace('const VERSION = "dev"', 'const VERSION = "' + commit.sha.slice(0, 7) + '"'))
-const alert = new Alert()
-alert.title = "Coast installed"
-alert.message = "Version " + commit.sha.slice(0, 7) + " (" + commit.commit.committer.date.slice(0, 10) + "): " +
-  commit.commit.message.split("\n")[0] + "\n\nThe panel footer shows this version. Open the Coast script to add your ADMIRALTY key, then add a Scriptable widget and choose Coast."
-alert.addAction("OK")
-await alert.present()
+
+async function tell(title, message) {
+  const alert = new Alert()
+  alert.title = title
+  alert.message = message
+  alert.addAction("OK")
+  await alert.present()
+}
+
+async function download() {
+  // The latest commit's exact file: the plain link is cached for a few minutes.
+  try {
+    const latest = new Request("https://api.github.com/repos/" + repo + "/commits/main")
+    latest.headers = {"Accept": "application/vnd.github+json"}
+    const commit = await latest.loadJSON()
+    if (/^[0-9a-f]{40}$/.test(commit.sha || "")) {
+      const request = new Request("https://raw.githubusercontent.com/" + repo + "/" + commit.sha + "/ios/Coast.js")
+      const code = await request.loadString()
+      if (request.response.statusCode === 200) return {code, version: commit.sha.slice(0, 7), note: commit.commit.message.split("\n")[0]}
+    }
+  } catch (e) {}
+  // GitHub's API can refuse (it limits requests per network), so fall back to a fresh copy of main.
+  const request = new Request("https://raw.githubusercontent.com/" + repo + "/main/ios/Coast.js?fresh=" + Date.now())
+  const code = await request.loadString()
+  if (request.response.statusCode !== 200) throw new Error("GitHub answered " + request.response.statusCode)
+  return {code, version: "main " + new Date().toISOString().slice(0, 16).replace("T", " "), note: "latest on main"}
+}
+
+try {
+  const {code, version, note} = await download()
+  if (!code.includes("Coast for iOS (Scriptable)") || !code.includes('const VERSION = "dev"')) throw new Error("The download wasn't the Coast script")
+  let fm = FileManager.iCloud()
+  try { fm.documentsDirectory() } catch (e) { fm = FileManager.local() }
+  const path = fm.joinPath(fm.documentsDirectory(), "Coast.js")
+  fm.writeString(path, code.replace('const VERSION = "dev"', 'const VERSION = "' + version + '"'))
+  if (!fm.readString(path).includes('const VERSION = "' + version + '"')) throw new Error("Saved, but reading it back gave a different file")
+  await tell("Coast installed", "Version " + version + ": " + note +
+    "\n\nThe bottom of the Coast panel shows this version. Run Coast from its tile in the script list. Widgets redraw on their next refresh, within the hour.")
+} catch (e) {
+  await tell("Coast update failed", String(e && e.message || e) + "\n\nCheck your connection and run the installer again.")
+}
