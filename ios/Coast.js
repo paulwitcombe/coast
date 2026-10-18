@@ -504,7 +504,7 @@ input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--fg);
 function send(action) { if (window.coastAction) { const done = window.coastAction; window.coastAction = null; done(action) } }
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-action=refresh], [data-action=update]")
-  if (b) b.textContent = b.dataset.action === "update" ? "Downloading…" : "Updating…"
+  if (b && window.coastAction) b.textContent = b.dataset.action === "update" ? "Downloading…" : "Updating…"
 }, true)
 const found = []
 document.addEventListener("click", e => {
@@ -706,29 +706,36 @@ async function latestScript() {
   try {
     const latest = new Request("https://api.github.com/repos/" + REPO + "/commits/main")
     latest.headers = {"Accept": "application/vnd.github+json"}
+    latest.timeoutInterval = 15
     const commit = await latest.loadJSON()
     if (/^[0-9a-f]{40}$/.test(commit.sha || "")) {
       const request = new Request("https://raw.githubusercontent.com/" + REPO + "/" + commit.sha + "/ios/Coast.js")
+      request.timeoutInterval = 15
       const code = await request.loadString()
       if (request.response.statusCode === 200) return {code, version: commit.sha.slice(0, 7)}
     }
   } catch (e) {}
   const request = new Request("https://raw.githubusercontent.com/" + REPO + "/main/ios/Coast.js?fresh=" + Date.now())
+  request.timeoutInterval = 15
   const code = await request.loadString()
   if (request.response.statusCode !== 200) throw new Error("GitHub answered " + request.response.statusCode)
   return {code, version: "main " + new Date().toISOString().slice(0, 16).replace("T", " ")}
 }
 
-async function selfUpdate() {
+// Saving over the running script can make Scriptable stop it, so `announce` shows the
+// result in the panel before the file is written.
+async function selfUpdate(announce) {
   const {code, version} = await latestScript()
   if (!code.includes("Coast for iOS (Scriptable)") || !code.includes('const VERSION = "dev"')) throw new Error("the download wasn't the Coast script")
   if (version === VERSION) return "Coast is already up to date (version " + version + ")."
   const here = module.filename
   const fm = here.includes("/Mobile Documents/") ? FileManager.iCloud() : FileManager.local()
   const stamped = code.replace('const VERSION = "dev"', 'const VERSION = "' + version + '"')
+  const done = "Updated to version " + version + ". Close and reopen Coast to use it; widgets catch up within the hour."
+  await announce(done)
   fm.writeString(here, stamped)
   if (fm.readString(here) !== stamped) throw new Error("saved, but reading it back gave a different file")
-  return "Updated to version " + version + ". Close and reopen Coast to use it; widgets catch up within the hour."
+  return done
 }
 
 // Locations, favourites and units only: never tide data.
@@ -800,7 +807,7 @@ async function runApp() {
     let fetchAgain = false, notice = ""
     if (action === "refresh") fetchAgain = true
     else if (action === "update") {
-      try { notice = await selfUpdate() } catch (e) { notice = "Update failed: " + (e && e.message || e) + ". Check your connection and try again." }
+      try { notice = await selfUpdate(message => view.loadHTML(panelHTML(report, state, THEME, message))) } catch (e) { notice = "Update failed: " + (e && e.message || e) + ". Check your connection and try again." }
     }
     else if (action === "favourite") {
       const has = state.favourites.some(f => sameLocation(f, state.active))
