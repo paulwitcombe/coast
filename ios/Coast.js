@@ -334,6 +334,23 @@ function compassSVG(direction, weak, theme) {
   </svg>`
 }
 
+// Added after the page has loaded, so a slow font download never leaves the panel blank.
+const FONT_LOADER = `<script>addEventListener("load", () => { const l = document.createElement("link"); l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap"; document.head.appendChild(l) })</script>`
+
+// Shown the moment the script opens, while the feeds load.
+function loadingHTML(state, theme) {
+  const loc = state.active
+  return `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${FONT_LOADER}
+<style>html { background: ${theme.background}; } body { margin: 0; font: 14px/1.45 "JetBrains Mono", ui-monospace, Menlo, monospace; color: ${theme.foreground};
+  padding: calc(env(safe-area-inset-top) + 12px) 12px; } .panel { border: 2px solid ${theme.accent}; padding: 18px 16px; }
+.heading { font-weight: 700; letter-spacing: 1.5px; color: ${theme.accent}; } .indent { padding-left: 3ch; margin-top: 7px; } .dim { opacity: 0.6; font-size: 12px; }</style>
+</head><body><main class="panel"><div class="heading">COAST</div>
+<div class="indent dim">${escapeHTML(placeName(loc))} · ${escapeHTML(loc.detail || "Coastal conditions")}</div>
+<div class="indent" style="margin-top:18px">Loading tides, currents and weather…</div></main></body></html>`
+}
+
 function panelHTML(report, state, theme) {
   const r = report || {}, loc = r.location || state.active, unit = loc.temperatureUnit || "C"
   const marine = r.marine || {}, weather = r.weather || {}, temps = r.temperatures || {}
@@ -346,8 +363,7 @@ function panelHTML(report, state, theme) {
   const list = (items, attr) => items.map((l, i) => `<button class="place" data-${attr}="${i}"><span class="accent">${escapeHTML(l.name)}</span><small>${escapeHTML(l.detail || "")}</small></button>`).join("")
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+${FONT_LOADER}
 <style>
 :root { --bg: ${theme.background}; --fg: ${theme.foreground}; --accent: ${theme.accent}; --sea: ${theme.sea}; --urgent: ${theme.urgent}; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -482,6 +498,7 @@ input { flex: 1; font: inherit; color: var(--fg); background: transparent; borde
 <script>
 // Scriptable waits on this; each tap sends one action back to the script.
 function send(action) { if (window.coastAction) { const done = window.coastAction; window.coastAction = null; done(action) } }
+document.addEventListener("click", e => { const b = e.target.closest("[data-action=refresh]"); if (b) b.textContent = "Updating…" }, true)
 const found = []
 document.addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return
@@ -655,7 +672,7 @@ function buildWidget(report, family, theme, problem) {
 async function scriptableJSON(url, headers) {
   const request = new Request(url)
   request.headers = Object.assign({"User-Agent": "Coast/1.1 (iOS Scriptable)"}, headers || {})
-  request.timeoutInterval = 18
+  request.timeoutInterval = 12
   // The API key must only ever reach the host it was sent to.
   if (headers) request.onRedirect = () => null
   const text = await request.loadString()
@@ -720,11 +737,14 @@ async function runApp() {
   const state = loadState()
   let key = storedKey() || await askForKey(false)
   const load = async () => { try { return await loadReport(state.active, key, scriptableJSON) } catch (e) { return null } }
-  let report = await load()
+  // Show the panel straight away, then fill it in when the feeds arrive.
   const view = new WebView()
-  await view.loadHTML(panelHTML(report, state, THEME))
+  await view.loadHTML(loadingHTML(state, THEME))
   let open = true
   const closed = view.present(true).then(() => { open = false })
+  let report = await load()
+  if (!open) return Script.complete()
+  await view.loadHTML(panelHTML(report, state, THEME))
   while (open) {
     const action = await Promise.race([closed.then(() => null), view.evaluateJavaScript("window.coastAction = completion", true)])
     if (!action || !open) break
@@ -761,7 +781,7 @@ async function runApp() {
 }
 
 const core = {buildWidget, chartImage, compassImage, bearing, arrow, knots, conditions, countdown, windChill, readings, distanceKm, parseStations, nearestStation,
-  parseEvents, tideCurve, parseModel, buildReport, loadReport, sourceUrls, panelHTML, searchLocation, escapeHTML, clock, dayClock, DEFAULT_LOCATION, THEME, UNAVAILABLE}
+  parseEvents, tideCurve, parseModel, buildReport, loadReport, sourceUrls, panelHTML, loadingHTML, searchLocation, escapeHTML, clock, dayClock, DEFAULT_LOCATION, THEME, UNAVAILABLE}
 
 if (typeof config === "undefined") module.exports = core
 else if (config.runsInWidget) runWidget().then(() => Script.complete())
