@@ -622,7 +622,8 @@ function buildWidget(report, family, theme, problem) {
       const l = row.addText(label + " "); l.font = Font.boldSystemFont(15); l.lineLimit = 1
       const v = row.addText(text); v.font = Font.systemFont(15); v.lineLimit = 1; v.minimumScaleFactor = 0.6
     }
-    line("Tide", next ? tideLine + " · " + next.due.replace(/^in /, "") : (r.tideNote ? "unavailable" : "—"))
+    // Short enough to fit at full size: the arrow already says high (↑) or low (↓).
+    line("Tide", next ? (next.kind === "high" ? "↑ " : "↓ ") + next.label.slice(-5) + " · " + next.due.replace(/^in /, "") : (r.tideNote ? "unavailable" : "—"))
     line("Current", currentLine.replace(/^Current /, ""))
     line("Sea", temperature(temps.sea, unit))
     return w
