@@ -500,11 +500,11 @@ input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--fg);
   <p class="small dim" style="margin-top:10px">Coast for iOS · version ${escapeHTML(VERSION)}</p>
 </main>
 <script>
-// Scriptable waits on this; each tap sends one action back to the script.
-function send(action) { if (window.coastAction) { const done = window.coastAction; window.coastAction = null; done(action) } }
+// Each tap opens a coast:// link, which the script catches instead of loading.
+function send(action) { location.href = "coast://run?a=" + encodeURIComponent(action) }
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-action=refresh], [data-action=update]")
-  if (b && window.coastAction) b.textContent = b.dataset.action === "update" ? "Downloading…" : "Updating…"
+  if (b) b.textContent = b.dataset.action === "update" ? "Downloading…" : "Updating…"
 }, true)
 const found = []
 document.addEventListener("click", e => {
@@ -795,6 +795,18 @@ async function runApp() {
   const load = async () => { try { return await loadReport(state.active, key, scriptableJSON) } catch (e) { return null } }
   // Show the panel straight away, then fill it in when the feeds arrive.
   const view = new WebView()
+  // Taps arrive as coast:// navigations; everything else (the page, its font) loads normally.
+  const queue = []
+  let wake = null
+  view.shouldAllowRequest = request => {
+    const url = String(request.url || "")
+    if (!url.startsWith("coast://")) return true
+    const at = url.indexOf("?a=")
+    if (at >= 0) queue.push(decodeURIComponent(url.slice(at + 3)))
+    if (wake && queue.length) { wake(); wake = null }
+    return false
+  }
+  const nextAction = () => new Promise(resolve => { if (queue.length) resolve(); else wake = resolve }).then(() => queue.shift())
   await view.loadHTML(loadingHTML(state, THEME))
   let open = true
   const closed = view.present(true).then(() => { open = false })
@@ -802,7 +814,7 @@ async function runApp() {
   if (!open) return Script.complete()
   await view.loadHTML(panelHTML(report, state, THEME))
   while (open) {
-    const action = await Promise.race([closed.then(() => null), view.evaluateJavaScript("window.coastAction = completion", true)])
+    const action = await Promise.race([closed.then(() => null), nextAction()])
     if (!action || !open) break
     let fetchAgain = false, notice = ""
     if (action === "refresh") fetchAgain = true
