@@ -4,10 +4,12 @@ from pathlib import Path
 import tempfile
 import unittest
 import urllib.error
+import urllib.request
 from zoneinfo import ZoneInfo
 from unittest.mock import patch
 from coast import SKIPPED, build_report, held_tides, no_tides, tide_source
 from location import DEFAULT_LOCATION
+import coast
 import tides
 
 STATIONS = json.dumps({"type": "FeatureCollection", "features": [
@@ -92,6 +94,19 @@ class TideTests(unittest.TestCase):
         self.assertEqual(source["note"], "Tide data temporarily unavailable")
         empty = {"data": None, "fetched": None, "error": None}
         self.assertEqual(build_report([source, empty, empty], now=0)["warnings"].count("Tide data temporarily unavailable"), 1)
+
+    def test_key_never_follows_redirects(self):
+        request = urllib.request.Request(tides.BASE + "Stations", headers={"Ocp-Apim-Subscription-Key": "k"})
+        self.assertIsNone(coast.NoRedirect().redirect_request(request, None, 302, "Found", {}, "http://elsewhere.invalid/"))
+        with patch("urllib.request.build_opener") as build:
+            build.return_value.open.return_value.__enter__.return_value.read.return_value = b"[]"
+            coast.download(tides.BASE + "Stations", {"Ocp-Apim-Subscription-Key": "k"})
+            self.assertEqual(build.call_args.args, (coast.NoRedirect,))
+            build.return_value.open.return_value.__enter__.return_value.read.return_value = b"x" * (coast.MAX_BYTES + 1)
+            with self.assertRaises(ValueError):
+                coast.download(tides.BASE + "Stations")
+        with self.assertRaises(ValueError):
+            coast.download("http://admiraltyapi.azure-api.net/", {"Ocp-Apim-Subscription-Key": "k"})
 
     def test_open_panel_hands_back_held_events(self):
         events = [{"time": 3600, "kind": "high", "height": 1.8}, {"time": 7200, "kind": "low", "height": 1.2}]

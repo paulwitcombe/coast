@@ -148,7 +148,10 @@ def search(query):
     url = "https://geocoding-api.open-meteo.com/v1/search?" + urlencode({"name": query, "count": 8, "language": "en", "format": "json"})
     request = urllib.request.Request(url, headers={"User-Agent": "Coast/1.1 (desktop widget)"})
     with urllib.request.urlopen(request, timeout=12) as response:
-        data = json.load(response)
+        body = response.read(1_000_001)
+    if len(body) > 1_000_000:
+        raise ValueError("Search response too large")
+    data = json.loads(body)
     if data.get("error"):
         raise ValueError(data.get("reason", "Search unavailable"))
     return {"results": search_results(data), "query": query}

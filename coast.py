@@ -11,13 +11,15 @@ import sys
 import tempfile
 import time
 import urllib.request
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 from location import DEFAULT_LOCATION, load_location
 from temperatures import readings
 import tides as admiralty
 
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))) / "omarchy-coast"
+# Far above any real reply (the station list is ~120 KB); stops a bad server filling memory.
+MAX_BYTES = 5_000_000
 
 def number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
@@ -37,10 +39,22 @@ def parse_model(raw):
         raise ValueError("Incomplete current forecast")
     return data
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """urllib copies custom headers onto redirects, even to another host or plain http."""
+    def redirect_request(self, *args):
+        return None
+
 def download(url, headers=None):
+    if not url.startswith("https://"):
+        raise ValueError("Only HTTPS sources are fetched")
     request = urllib.request.Request(url, headers={"User-Agent": "Coast/1.1 (desktop widget)", **(headers or {})})
-    with urllib.request.urlopen(request, timeout=18) as response:
-        return response.read().decode("utf-8")
+    # The API key must only ever reach the host it was sent to.
+    opener = urllib.request.build_opener(NoRedirect) if headers else urllib.request.build_opener()
+    with opener.open(request, timeout=18) as response:
+        body = response.read(MAX_BYTES + 1)
+    if len(body) > MAX_BYTES:
+        raise ValueError("Response too large")
+    return body.decode("utf-8")
 
 def fetch_live(url, parser, headers=None):
     """Fetch without touching disk: ADMIRALTY Discovery data may not be cached or stored."""
@@ -222,7 +236,7 @@ def tide_source(location):
     station = admiralty.nearest_station(stations["data"], location["latitude"], location["longitude"])
     if not station:
         return no_tides("No UK tidal station within %d km of this location" % admiralty.MAX_STATION_KM), None
-    url = admiralty.BASE + "Stations/" + station["id"] + "/TidalEvents?duration=7"
+    url = admiralty.BASE + "Stations/" + quote(station["id"], safe="") + "/TidalEvents?duration=7"
     events = fetch_live(url, admiralty.parse_events, auth)
     # Quota exceeded (403), outages and bad replies all read the same in the panel.
     return (events, station) if events["data"] else (no_tides(UNAVAILABLE), None)
