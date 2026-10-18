@@ -73,7 +73,28 @@ Panel {
     readonly property string family: bar ? bar.fontFamily : "monospace"
     function value(v, suffix) { return typeof v === "number" && isFinite(v) ? v.toFixed(1) + suffix : "—" }
     function temperature(v) { return typeof v === "number" && isFinite(v) ? value(location.temperatureUnit === "F" ? v * 1.8 + 32 : v, location.temperatureUnit === "F" ? "°F" : "°C") : "—" }
-    function refresh() { if (!fetcher.running && !locationWorker.running) fetcher.running = true }
+    // ADMIRALTY Discovery data may not be cached or stored. Tides are fetched live only while
+    // the panel is open, held in memory so the countdown can tick, refetched every 15 minutes
+    // or on Refresh, and dropped when the panel closes. Closed, only weather and currents update.
+    property var tideHold: null
+    property real tideFetchedAt: 0
+    property bool refreshPending: false
+    function refresh(live) {
+        if (fetcher.running || locationWorker.running) { refreshPending = true; return }
+        var args = []
+        if (opened)
+            args = live || !tideHold || Date.now() - tideFetchedAt > 15 * 60000 ? ["--tides"] : ["--held", JSON.stringify(tideHold)]
+        fetcher.command = python("coast.py", args)
+        fetcher.running = true
+    }
+    function withoutTides(r) {
+        return Object.assign({}, r, {tides: [], nextTide: null, followingTide: null, tideCurve: null, tideStation: null, tideHold: null})
+    }
+    onOpenedChanged: {
+        if (opened) { refresh(); return }
+        tideHold = null
+        report = withoutTides(report)
+    }
     function showLocations() {
         choosingLocation = !choosingLocation
         locationMessage = ""
@@ -99,7 +120,7 @@ Panel {
         locationMessage = "Saving location…"
         runLocation("select", [JSON.stringify(next)])
     }
-    function open() { controller.show(); refresh(); loadLocations() }
+    function open() { controller.show(); loadLocations() }
     function arrow(d) { return typeof d === "number" ? ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"][Math.round(d / 45) % 8] : "·" }
     // Tide chart geometry: x is a 0–1 window fraction, heights scale between the window's low and high.
     function tidePoint(curve, fraction, w, h) {
@@ -151,6 +172,7 @@ Panel {
             if (root.locationAction === "select") {
                 // Never relabel the previous location's readings as the new beach.
                 root.report = {location: response.active}
+                root.tideHold = null
                 root.failure = ""
                 root.choosingLocation = false
                 root.favouritesOpen = false
@@ -162,12 +184,18 @@ Panel {
     }
     Process {
         id: fetcher
-        command: root.python("coast.py")
         stdout: StdioCollector { id: fetchOutput; waitForEnd: true }
         onExited: function(code) {
+            if (root.refreshPending) { root.refreshPending = false; Qt.callLater(root.refresh) }
             if (code !== 0) { root.failure = "Coastal feed failed. Click Refresh to retry."; return }
-            try { root.report = JSON.parse(fetchOutput.text); root.failure = "" }
-            catch (e) { root.failure = "Could not read coastal data. Click Refresh to retry." }
+            var next = null
+            try { next = JSON.parse(fetchOutput.text) }
+            catch (e) { root.failure = "Could not read coastal data. Click Refresh to retry."; return }
+            root.failure = ""
+            // Closed while fetching: keep nothing from ADMIRALTY.
+            if (!root.opened) { root.report = root.withoutTides(next); return }
+            if (command.indexOf("--tides") >= 0) { root.tideHold = next.tideHold || null; root.tideFetchedAt = Date.now() }
+            root.report = next
         }
     }
     Timer { interval: 60000; repeat: true; running: true; triggeredOnStart: true; onTriggered: root.refresh() }
@@ -177,7 +205,7 @@ Panel {
         bar: root.bar
         text: "󰞍"
         tooltipText: (root.location.name || "Coast") + " · " + root.temperature(root.weather.temperature_2m) + " · " + root.arrow(root.marine.direction) + " " + root.value(root.marine.speed, " kn") + (root.report.nextTide ? "\nNext " + root.report.nextTide.kind + " tide " + root.report.nextTide.label : "")
-        onPressed: function(b) { if (b === Qt.MiddleButton) root.refresh(); else root.toggle() }
+        onPressed: function(b) { if (b === Qt.MiddleButton) root.refresh(true); else root.toggle() }
     }
     KeyboardPanel {
         id: popup
@@ -193,7 +221,7 @@ Panel {
             anchors.fill: parent
             blocked: locationField.activeFocus
             onCloseRequested: { if (root.favouritesOpen) root.favouritesOpen = false; else root.close() }
-            onReturnRequested: root.refresh()
+            onReturnRequested: root.refresh(true)
             onTabRequested: function(direction) { root.switchPanel(direction) }
             onTextKey: function(text) { if (text === "/") root.showLocations(); else if (text === "f") root.toggleFavourites() }
             Flickable {
@@ -342,7 +370,7 @@ Panel {
                                         text: fetcher.running ? "Updating…" : "↻ Refresh"
                                         font.pixelSize: Style.font.bodySmall
                                         color: Color.accent
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.refresh() }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.refresh(true) }
                                     }
                                 }
                             }

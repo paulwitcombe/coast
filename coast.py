@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Location-aware coastal feeds. Standard library only; independent cached sources."""
+"""Location-aware coastal feeds. Standard library only; Open-Meteo is cached, ADMIRALTY tides never are."""
 import concurrent.futures
 import datetime as dt
 import hashlib
@@ -7,6 +7,7 @@ import json
 import math
 import os
 from pathlib import Path
+import sys
 import tempfile
 import time
 import urllib.request
@@ -37,6 +38,18 @@ def parse_model(raw):
         raise ValueError("Incomplete current forecast")
     return data
 
+def download(url, headers=None):
+    request = urllib.request.Request(url, headers={"User-Agent": "Coast/1.1 (desktop widget)", **(headers or {})})
+    with urllib.request.urlopen(request, timeout=18) as response:
+        return response.read().decode("utf-8")
+
+def fetch_live(url, parser, headers=None):
+    """Fetch without touching disk: ADMIRALTY Discovery data may not be cached or stored."""
+    try:
+        return {"data": parser(download(url, headers)), "fetched": time.time(), "error": None}
+    except Exception as error:
+        return {"data": None, "fetched": None, "error": str(error)}
+
 def fetch(name, url, parser, ttl, headers=None):
     path = CACHE / (name + "-" + hashlib.sha256(url.encode()).hexdigest()[:16] + ".json")
     cached = None
@@ -47,10 +60,7 @@ def fetch(name, url, parser, ttl, headers=None):
     except (OSError, ValueError, KeyError):
         cached = None
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "Coast/1.1 (desktop widget)", **(headers or {})})
-        with urllib.request.urlopen(request, timeout=18) as response:
-            data = parser(response.read().decode("utf-8"))
-        result = {"data": data, "fetched": time.time(), "error": None}
+        result = {"data": parser(download(url, headers)), "fetched": time.time(), "error": None}
         CACHE.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(mode="w", dir=CACHE, delete=False) as f:
             try:
@@ -152,18 +162,21 @@ def build_report(sources, now=None, location=None, station=None):
             velocity = knots(hourly.get("ocean_current_velocity", [])[i], md.get("hourly_units", {}).get("ocean_current_velocity"))
             angle = hourly.get("ocean_current_direction", [])[i] if velocity is not None and velocity > 0 else None
             forecast.append({"time": at(stamp), "speed": velocity, "direction": angle, "bearing": bearing(angle)})
-    warnings = [name + ": cached / unavailable" for name, source in zip(("Tides", "Weather", "Currents"), sources) if source["error"] and not source.get("note")]
+    warnings = ["Tides: unavailable"] if tides["error"] and not tides.get("note") else []
+    warnings += [name + ": cached / unavailable" for name, source in (("Weather", weather), ("Currents", marine)) if source["error"]]
     if tides.get("note"): warnings.append(tides["note"])
     if not w: warnings.append("Weather conditions unavailable or expired")
     if not m: warnings.append("Current conditions unavailable or expired")
     if not nearby: warnings.append("No nearby marine grid: offshore readings withheld (more than 30 km from this location)")
-    if not tides.get("note") and not any(e["time"] >= now for e in events): warnings.append("No upcoming tide times available")
+    if not tides.get("skipped") and not tides.get("note") and not any(e["time"] >= now for e in events): warnings.append("No upcoming tide times available")
     return {
         "updated": at(now), "tides": events[:12], "location": location, "temperatures": temperatures,
         "nextTide": dict(upcoming[0], due=countdown(upcoming[0]["time"] - now)) if upcoming else None,
         "followingTide": upcoming[1] if len(upcoming) > 1 else None,
         "tideCurve": tide_curve(tides["data"] or [], now),
         "tideStation": station if tides["data"] else None, "tideNote": tides.get("note"),
+        # Handed back by the panel while it stays open, so the countdown can tick without refetching.
+        "tideHold": {"events": tides["data"], "station": station, "fetched": tides["fetched"]} if tides["data"] else None,
         "weather": {**w, "summary": conditions(w.get("weather_code")), "windBearing": bearing(w.get("wind_direction_10m"))},
         "marine": {"speed": speed, "direction": direction, "bearing": bearing(direction), "wave": m.get("wave_height"), "temperature": sea, "time": at(m["time"]) if m else "—", "latitude": md.get("latitude"), "longitude": md.get("longitude"), "distance": distance},
         "forecast": forecast, "warnings": warnings,
@@ -186,30 +199,52 @@ def no_tides(note):
     return {"data": None, "fetched": None, "error": note, "note": note}
 
 
+# The panel is closed: tides are not fetched, so nothing from ADMIRALTY is held.
+SKIPPED = {"data": None, "fetched": None, "error": None, "note": None, "skipped": True}
+
+
+def held_tides(text):
+    """Events the open panel already holds in memory, passed back on its next tick."""
+    held = json.loads(text)
+    events = [e for e in held["events"] if number(e.get("time")) and e.get("kind") in ("high", "low") and number(e.get("height"))]
+    if not events or not number(held.get("fetched")):
+        raise ValueError("No held tide events")
+    return {"data": events, "fetched": held["fetched"], "error": None}, held.get("station")
+
+
 def tide_source(location):
-    """Events for the nearest ADMIRALTY station, or a reason there are none."""
+    """Live events for the nearest ADMIRALTY station, or a reason there are none.
+
+    Discovery terms forbid caching or storing, so both requests go straight to the
+    API and nothing is written to disk.
+    """
     key = admiralty.api_key()
     if not key:
         return no_tides("Tide times need a free ADMIRALTY API key (see README)"), None
     auth = admiralty.headers(key)
-    # The station list barely changes; events are refetched hourly.
-    stations = fetch("tide-stations", admiralty.BASE + "Stations", admiralty.parse_stations, 7 * 86400, auth)
+    stations = fetch_live(admiralty.BASE + "Stations", admiralty.parse_stations, auth)
     if not stations["data"]:
         return no_tides("Tide stations unavailable: " + str(stations["error"])), None
     station = admiralty.nearest_station(stations["data"], location["latitude"], location["longitude"])
     if not station:
         return no_tides("No UK tidal station within %d km of this location" % admiralty.MAX_STATION_KM), None
     url = admiralty.BASE + "Stations/" + station["id"] + "/TidalEvents?duration=7"
-    return fetch("tides-" + station["id"], url, admiralty.parse_events, 3600, auth), station
+    return fetch_live(url, admiralty.parse_events, auth), station
 
 
-def main():
+def main(args=sys.argv[1:]):
+    """No arguments: weather and currents only. --tides: fetch tides live. --held JSON: reuse the panel's."""
     location = load_location()
     weather_url, marine_url = source_urls(location)
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         weather = pool.submit(fetch, "weather", weather_url, parse_model, 900)
         marine = pool.submit(fetch, "marine", marine_url, parse_model, 900)
-        tides, station = pool.submit(tide_source, location).result()
+        if args[:1] == ["--tides"]:
+            tides, station = pool.submit(tide_source, location).result()
+        elif args[:1] == ["--held"] and len(args) > 1:
+            tides, station = held_tides(args[1])
+        else:
+            tides, station = SKIPPED, None
         print(json.dumps(build_report([tides, weather.result(), marine.result()], location=location, station=station), allow_nan=False))
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from coast import ZONE, build_report, no_tides, tide_source
+from coast import SKIPPED, ZONE, build_report, held_tides, no_tides, tide_source
 from location import DEFAULT_LOCATION
 import tides
 
@@ -57,11 +57,43 @@ class TideTests(unittest.TestCase):
             source, station = tide_source(DEFAULT_LOCATION)
         self.assertIsNone(station)
         self.assertIn("API key", source["note"])
-        fake = lambda name, url, parser, ttl, headers=None: {"data": parser(STATIONS), "fetched": 0, "error": None}
-        with patch("tides.api_key", return_value="k"), patch("coast.fetch", side_effect=fake):
+        fake = lambda url, parser, headers=None: {"data": parser(STATIONS), "fetched": 0, "error": None}
+        with patch("tides.api_key", return_value="k"), patch("coast.fetch_live", side_effect=fake):
             source, station = tide_source(dict(DEFAULT_LOCATION, latitude=-33.87, longitude=151.21))
         self.assertIsNone(station)
         self.assertIn("No UK tidal station", source["note"])
+
+    def test_tides_are_never_written_to_disk(self):
+        events = json.dumps([{"EventType": "HighWater", "DateTime": "2026-10-17T19:27:00", "Height": 1.8},
+                             {"EventType": "LowWater", "DateTime": "2026-10-18T01:40:00", "Height": 0.6}])
+        replies = {"Stations": STATIONS, "Stations/0037/TidalEvents?duration=7": events}
+        def download(url, headers=None):
+            self.assertEqual(headers, {"Ocp-Apim-Subscription-Key": "k"})
+            return replies[url.replace(tides.BASE, "")]
+        with tempfile.TemporaryDirectory() as folder, patch("coast.CACHE", Path(folder)), \
+                patch("tides.api_key", return_value="k"), patch("coast.download", side_effect=download):
+            source, station = tide_source(DEFAULT_LOCATION)
+            self.assertEqual(list(Path(folder).iterdir()), [])
+        self.assertEqual((station["id"], len(source["data"])), ("0037", 2))
+
+    def test_open_panel_hands_back_held_events(self):
+        events = [{"time": 3600, "kind": "high", "height": 1.8}, {"time": 7200, "kind": "low", "height": 1.2}]
+        station = {"id": "0037", "name": "Bournemouth", "distance": 0.9}
+        empty = {"data": None, "fetched": None, "error": None}
+        first = build_report([{"data": events, "fetched": 5, "error": None}, empty, empty], now=0, station=station)
+        source, held_station = held_tides(json.dumps(first["tideHold"]))
+        later = build_report([source, empty, empty], now=3000, station=held_station)
+        self.assertEqual(later["nextTide"]["due"], "in 10m")
+        self.assertEqual((later["tideStation"], later["fetched"]["tides"]), (station, first["fetched"]["tides"]))
+        with self.assertRaises(ValueError):
+            held_tides('{"events": [], "fetched": 5}')
+
+    def test_closed_panel_skips_tides_quietly(self):
+        empty = {"data": None, "fetched": None, "error": None}
+        report = build_report([SKIPPED, empty, empty], now=0)
+        self.assertIsNone(report["nextTide"])
+        self.assertIsNone(report["tideHold"])
+        self.assertFalse([w for w in report["warnings"] if "ide" in w])
 
     def test_report_carries_station_and_note(self):
         empty = {"data": None, "fetched": None, "error": None}

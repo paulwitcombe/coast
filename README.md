@@ -42,6 +42,14 @@ UK Hydrographic Office's ADMIRALTY UK Tidal API, which needs a free key:
    `~/.config/omarchy/coast/admiralty-key` with owner-only permissions, outside
    the plugin folder. Alternatively set `ADMIRALTY_API_KEY` in the environment.
 
+The Discovery terms don't allow tide data to be cached or stored, so Coast
+never writes it to disk. Tides are fetched live when the panel opens (two
+requests: the station list and that station's events), then again every 15
+minutes while it stays open or when you refresh. In between, the open panel
+keeps them in memory so the countdown can tick, and drops them when it closes.
+With the panel closed, only weather and currents update, so the bar tooltip
+shows no tide.
+
 This clones the plugin into `~/.config/omarchy/plugins/pdog.coast`, validates it
 and puts the wave icon in the bar (left section by default). Then:
 
@@ -96,9 +104,9 @@ measurement of beach rip currents or a navigation aid. Wind direction is
 separately labelled **from**.
 
 No new packages required. Uses Python 3 and the existing Omarchy shell.
-Weather/marine feeds are cached for 15 minutes, tide events for 1 hour and the
-tide station list for 7 days, under `~/.cache/omarchy-coast`. Failed requests
-retain cached data with a warning; current conditions older than 2 hours are
+Weather/marine feeds are cached for 15 minutes under `~/.cache/omarchy-coast`.
+Tide data is never cached (see [the key section](#tide-times-uk-free-admiralty-key)).
+Failed weather/marine requests retain cached data with a warning; current conditions older than 2 hours are
 hidden. Times use the location's timezone with automatic daylight-saving
 changes. Without a key, or away from UK stations, the panel says why there are
 no tide times rather than estimating them.
@@ -191,7 +199,7 @@ an explicitly empty favourites list stays empty. State writes remain atomic.
 - `Widget.qml`: bar button and panel.
 - `CurrentCompass.qml`: the current compass dial; no shell imports, so it can be
   rendered on its own to check orientation.
-- `coast.py`: fetches, caches and combines the feeds into one report.
+- `coast.py`: fetches the feeds (caching Open-Meteo only) and combines them into one report.
 - `location.py`: location search, recents, favourites and saved state.
 - `temperatures.py`: validates the temperature readings and works out wind chill.
 - `tides.py`: ADMIRALTY station lookup and tide events.
