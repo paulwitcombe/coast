@@ -1,4 +1,4 @@
-// Installs or updates Coast in Scriptable. Paste into a new Scriptable script and run it
+// Installs or updates Coast in Scriptable. Paste into a NEW Scriptable script named "Install Coast" and run it
 // from the script list (tap its tile), not from inside Coast's editor: an open editor runs
 // and can save back the old code.
 // Downloads ios/Coast.js from github.com/paulwitcombe/coast and saves it as the "Coast" script.
@@ -32,6 +32,8 @@ async function download() {
 }
 
 try {
+  // Saved as "Coast", the installer would overwrite itself and the editor would save it back.
+  if (Script.name().toLowerCase() === "coast") throw new Error("This installer is saved as \"Coast\". Rename it to \"Install Coast\" (Script Settings → Name), go back to the script list and run it from its tile.")
   const {code, version, note} = await download()
   if (!code.includes("Coast for iOS (Scriptable)") || !code.includes('const VERSION = "dev"')) throw new Error("The download wasn't the Coast script")
   let fm = FileManager.iCloud()

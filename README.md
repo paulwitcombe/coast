@@ -215,7 +215,8 @@ works anywhere without the laptop.
 2. On the iPhone, open
    https://raw.githubusercontent.com/paulwitcombe/coast/main/ios/install.js in
    Safari, select all and copy.
-3. In Scriptable, tap **+**, paste, and tap ▶. It downloads `ios/Coast.js`
+3. In Scriptable, tap **+**, paste, name the new script **Install Coast** (not
+   Coast) and run it from its tile. It downloads `ios/Coast.js`
    and saves it as the **Coast** script. Run the installer again to update.
 4. Open **Coast** and paste your ADMIRALTY primary key when asked. It is stored
    in the iOS Keychain, not in the script.
