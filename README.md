@@ -231,10 +231,10 @@ from its tile: running it from inside the editor uses the editor's copy.
 
 **What it shows**
 
-- **Widgets.** Small: the next tide, countdown, current and sea temperature.
-  Medium adds the compass and tide chart. Large adds the next four tides and
-  temperatures. Lock screen: labelled Tide (↑ high, ↓ low), Current and Sea
-  lines.
+- **Widgets.** Small: the next tide, countdown, current, and sea and air
+  temperatures. Medium adds the compass and tide chart. Large adds the next four
+  tides and feels-like temperature. Lock screen: labelled Tide (↑ high, ↓ low),
+  Current, and Sea & Air lines.
 - **Panel.** Tap a widget or run the script: the same sections as the Omarchy
   panel, with location search, favourites, °C/°F and Refresh.
 

@@ -643,15 +643,18 @@ function buildWidget(report, family, theme, problem) {
   }
   if (family === "accessoryRectangular") {
     // Labelled lines in the lock screen's own font, which is narrower than monospace.
-    const line = (label, text) => {
-      const row = w.addStack(); row.centerAlignContent()
-      const l = row.addText(label + " "); l.font = Font.boldSystemFont(15); l.lineLimit = 1
+    const pair = (row, label, text) => {
+      const l = row.addText(label + " "); l.font = Font.boldSystemFont(15); l.lineLimit = 1; l.minimumScaleFactor = 0.6
       const v = row.addText(text); v.font = Font.systemFont(15); v.lineLimit = 1; v.minimumScaleFactor = 0.6
     }
+    const line = (label, text) => { const row = w.addStack(); row.centerAlignContent(); pair(row, label, text) }
     // Short enough to fit at full size: the arrow already says high (↑) or low (↓).
     line("Tide", next ? (next.kind === "high" ? "↑ " : "↓ ") + next.label.slice(-5) + " · " + next.due.replace(/^in /, "") : (r.tideNote ? "unavailable" : "—"))
     line("Current", currentLine.replace(/^Current /, ""))
-    line("Sea", temperature(temps.sea, unit))
+    const tempRow = w.addStack(); tempRow.centerAlignContent()
+    pair(tempRow, "Sea", temperature(temps.sea, unit))
+    const sep = tempRow.addText(" · "); sep.font = Font.systemFont(15); sep.lineLimit = 1; sep.minimumScaleFactor = 0.6
+    pair(tempRow, "Air", temperature(temps.air, unit))
     return w
   }
 
@@ -674,7 +677,7 @@ function buildWidget(report, family, theme, problem) {
     tide(w)
     w.addSpacer()
     addText(w, currentLine, 12, sea, true)
-    addText(w, "Sea " + temperature(temps.sea, unit), 11, fg, false, 0.7)
+    addText(w, "Sea " + temperature(temps.sea, unit) + " · Air " + temperature(temps.air, unit), 11, fg, false, 0.7)
     return w
   }
 
@@ -682,8 +685,16 @@ function buildWidget(report, family, theme, problem) {
   const left = row.addStack(); left.layoutVertically(); tide(left)
   row.addSpacer(10)
   const right = row.addStack(); right.layoutVertically()
-  const compass = right.addImage(compassImage(marine.direction, number(marine.speed) && marine.speed < 0.3, 64, theme))
+  const compassHost = family === "medium" ? right.addStack() : right
+  if (family === "medium") { compassHost.layoutHorizontally(); compassHost.centerAlignContent() }
+  const compass = compassHost.addImage(compassImage(marine.direction, number(marine.speed) && marine.speed < 0.3, 64, theme))
   compass.imageSize = new Size(52, 52)
+  if (family === "medium") {
+    compassHost.addSpacer(8)
+    const side = compassHost.addStack(); side.layoutVertically()
+    addText(side, "Sea " + temperature(temps.sea, unit), 11, fg, false, 0.7)
+    addText(side, "Air " + temperature(temps.air, unit), 11, fg, false, 0.7)
+  }
   addText(right, currentLine, 11, sea, true)
   w.addSpacer(8)
   if (r.tideCurve) { const img = w.addImage(chartImage(r.tideCurve, 300, family === "medium" ? 34 : 70, theme)); img.imageSize = new Size(300, family === "medium" ? 34 : 70) }

@@ -152,3 +152,69 @@ test("a failed Open-Meteo feed falls back to its last reading", async () => {
   assert.ok(report.warnings.includes("Currents: cached / unavailable"))
   assert.ok(!("tides" in kept))
 })
+
+test("widgets show current air temperature alongside sea temperature", () => {
+  const stack = () => {
+    const items = []
+    return {
+      items,
+      layoutVertically() {}, layoutHorizontally() {}, centerAlignContent() {}, setPadding() {}, addSpacer() {},
+      addImage() { return {} },
+      addStack() { const child = stack(); items.push(child); return child },
+      addText(text) { const node = {text, centerAlignText() {}}; items.push(node); return node }
+    }
+  }
+  const flatten = node => node.items ? node.items.flatMap(flatten) : [node.text]
+  const noop = () => {}
+  const stubs = {
+    ListWidget: function() { return stack() },
+    Color: function(c, a) { return {c, a} },
+    Font: {boldMonospacedSystemFont: noop, regularMonospacedSystemFont: noop, boldSystemFont: noop, systemFont: noop},
+    Size: function(w, h) { return {w, h} },
+    Point: function(x, y) { return {x, y} },
+    Rect: function(x, y, w, h) { return {x, y, w, h} },
+    Path: function() { return {move: noop, addLine: noop, closeSubpath: noop} },
+    DrawContext: function() {
+      return {addPath: noop, setFillColor: noop, fillPath: noop, setStrokeColor: noop, setLineWidth: noop, strokePath: noop,
+        fillRect: noop, fillEllipse: noop, strokeEllipse: noop, setTextColor: noop, setFont: noop, setTextAlignedCenter: noop,
+        drawTextInRect: noop, getImage: () => ({})}
+    }
+  }
+  const saved = {}
+  for (const k of Object.keys(stubs)) { saved[k] = globalThis[k]; globalThis[k] = stubs[k] }
+  try {
+    const now = Date.now() / 1000
+    const weather = {data: {current: {time: now, temperature_2m: 7.5, apparent_temperature: 5.2, wind_speed_10m: 8, weather_code: 1},
+      current_units: {temperature_2m: "°C", apparent_temperature: "°C", wind_speed_10m: "mph"}}, fetched: now, error: null}
+    const marine = {data: {latitude: 50.7, longitude: -1.88, current: {time: now, sea_surface_temperature: 12.1, ocean_current_velocity: 2, ocean_current_direction: 180},
+      current_units: {sea_surface_temperature: "°C", ocean_current_velocity: "km/h"}}, fetched: now, error: null}
+    const report = coast.buildReport([empty, weather, marine], now, coast.DEFAULT_LOCATION, null)
+
+    const lockText = flatten(coast.buildWidget(report, "accessoryRectangular", coast.THEME)).join("")
+    assert.ok(lockText.includes("Sea 12.1°C · Air 7.5°C"), lockText)
+
+    const smallText = flatten(coast.buildWidget(report, "small", coast.THEME)).join("\n")
+    assert.ok(smallText.includes("Sea 12.1°C · Air 7.5°C"), smallText)
+
+    const mediumText = flatten(coast.buildWidget(report, "medium", coast.THEME)).join("\n")
+    assert.ok(mediumText.includes("Sea 12.1°C"), mediumText)
+    assert.ok(mediumText.includes("Air 7.5°C"), mediumText)
+
+    const largeText = flatten(coast.buildWidget(report, "large", coast.THEME)).join("\n")
+    assert.ok(largeText.includes("AIR\n7.5°C"), largeText)
+
+    // Respects °F and falls back cleanly to "—" when weather is missing.
+    const reportF = coast.buildReport([empty, weather, marine], now, Object.assign({}, coast.DEFAULT_LOCATION, {temperatureUnit: "F"}), null)
+    const smallF = flatten(coast.buildWidget(reportF, "small", coast.THEME)).join("\n")
+    assert.ok(smallF.includes("Sea 53.8°F · Air 45.5°F"), smallF)
+
+    const missing = coast.buildReport([empty, empty, marine], now, coast.DEFAULT_LOCATION, null)
+    const lockMissing = flatten(coast.buildWidget(missing, "accessoryRectangular", coast.THEME)).join("")
+    assert.ok(lockMissing.includes("Sea 12.1°C · Air —"), lockMissing)
+  } finally {
+    for (const k of Object.keys(saved)) {
+      if (saved[k] === undefined) delete globalThis[k]
+      else globalThis[k] = saved[k]
+    }
+  }
+})
